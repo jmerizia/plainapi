@@ -1,3 +1,6 @@
+# partial implementation of the SQL layer described here:
+#  https://forcedotcom.github.io/phoenix/index.html
+
 from enum import Enum
 
 
@@ -486,6 +489,34 @@ def parse_table_expression(tokens, idx):
     else:
         return None, idx
 
+def parse_alias(tokens, idx):
+
+
+def parse_select_expression(tokens, idx):
+    tok, idx = consume_token(tokens, idx)
+    node = Node(name='', kind=NodeKind.SelectExpression)
+    if not tok:
+        perror("Expected token")
+    elif tok == '*':
+        child = Node(name='*', kind=NodeKind.Token)
+        node.children.append(child)
+    elif tok == '(':
+        perror('Column families are not yet supported')
+    else:
+        idx -= 1
+        child, idx = parse_term(tokens, idx)
+        if child:
+            tok, idx = consume_token(tokens, idx)
+            if not tok:
+                return node, idx
+            elif tok.upper() == 'AS':
+                child = Node(name=tok, kind=NodeKind.Token)
+                node.children.append(child)
+            else:
+                pass
+        else:
+            return None, idx
+
 def parse_select(tokens, idx):
     tok = tokens[idx]
     idx += 1
@@ -508,20 +539,11 @@ def parse_select(tokens, idx):
     tok, idx = consume_token(tokens, idx)
     if not tok:
         perror("Expected token")
-    if tok == '*':
-        child = Node(name='*', kind=NodeKind.Token)
+    child, idx = parse_select_expression(tokens, idx)
+    if child:
         node.children.append(child)
-    elif tok == '(':
-        child = Node(name='(', kind=NodeKind.Token)
-        node.children.append(child)
-        print('TODO: some more logic needed here')
     else:
-        idx -= 1
-        #child, idx = parse_term(tokens, idx)
-        #print('TODO')
-    tok, idx = consume_token(tokens, idx)
-    if not tok:
-        perror("Expected token")
+        perror('Expected select expression')
     # TODO: potential repeats
     if tok.upper() == 'FROM':
         child = Node(name='FROM', kind=NodeKind.Token)
@@ -556,17 +578,4 @@ def print_tree(node, depth=0):
     print(f'"{node.name}", {node.kind}')
     for child in node.children:
         print_tree(child, depth+1)
-
-text = """
-SELECT * FROM users WHERE id = 10
-"""
-
-print("Query:", text.strip())
-tokens = list(tokenize_sql(text))
-print('Tokens:', tokens)
-tree, _ = parse_select(tokens, 0)
-if tree:
-    print_tree(tree)
-else:
-    print('Failed to parse')
 

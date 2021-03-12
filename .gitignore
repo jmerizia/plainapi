@@ -1,0 +1,7 @@
+app.py
+demo.db
+__pycache__/
+cache/
+.env
+*.swp
+*.swo
