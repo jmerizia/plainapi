@@ -18,10 +18,13 @@ You might want to use a virtual environment:
 
 ```
 python3 -m venv ./venv
+source ./venv/bin/activate
 pip install -r requirements.txt
 ```
 
 Note: This has been tested in Python 3.8, but it _should_ technically work in Python 3.6+.
+
+## Generate an API
 
 Then, tweak the `queries.txt` file to include some queries
 (placing an empty line between queries).
