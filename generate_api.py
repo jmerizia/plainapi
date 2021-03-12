@@ -250,7 +250,7 @@ con = sqlite3.connect('demo.db')
     return code
 
 
-def generate_app(input_fn: str, output_fn: str, use_cache: bool = True):
+def generate_app(input_fn: str = 'queries.txt', output_fn: str = 'api.py', use_cache: bool = True):
     """
     Given a file of English sentences, output a file containing a FastAPI web server.
 

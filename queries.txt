@@ -5,3 +5,5 @@ get a user's email with a certain id
 get a user's admin status from their email address
 
 get a list of all users at a certain location
+
+get the emails of all users above a certain age that live in a certain location
