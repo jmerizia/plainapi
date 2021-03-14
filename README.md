@@ -17,37 +17,27 @@ Then, install everything in the `requirements.txt` file.
 You might want to use a virtual environment:
 
 ```
-python3 -m venv ./venv
+python3.8 -m venv ./venv
 source ./venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Note: This has been tested in Python 3.8, but it _should_ technically work in Python 3.6+.
+Note: This has been tested in Python 3.8, but it _should_ technically work in Python 3.6+
+(you might have to play with dependency versions).
 
 ## Generate an API
 
-Then, tweak the `queries.txt` file to include some queries
-(placing an empty line between queries).
-
+Start by tweaking the `plain.txt` file to modify the migrations and queries
+(each query/migration on it's own line).
 At the moment, queries can only be as complicated as a single SQL
 statement, but this restriction will eventually be lifted.
 
-For example,
-
-```
-get all of the users
-
-get a user's admin status from their email address
-
-show me the oldest user given a certain location
-```
-
-Then run the generation script `generate_api.py`.
+Then, run the generation script `generate_api.py`.
 This will show you all of the queries and generate
 a new file called `api.py`.
 
 Once that finishes, you can run your server with `uvicorn api:app`,
 and view the OpenAPI docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-Enjoy!
+Enjoy, and please don't hesitate to report errors!
 

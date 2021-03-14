@@ -1,6 +1,6 @@
 import sqlite3
-from typing import List, Tuple
-from parse_sqlite import get_select_stmt_output_type
+from typing import List, Tuple, Optional
+from parse_sql import parse_query, parse_schema, type_hint2schema_type
 import os
 import subprocess
 import pprint
@@ -8,6 +8,9 @@ from fire import Fire
 from dotenv import load_dotenv
 import openai
 from uuid import uuid4
+import sqlite3
+
+from common import perror
 
 
 load_dotenv()
@@ -38,13 +41,14 @@ def cached_gpt3(prompt: str, stop: str = '\n', use_cache: bool = True) -> str:
         stop=stop,
     )
     result = response['choices'][0]['text']
-    
+
     # Add to the cache
     cache_file = os.path.join('cache', str(uuid4()))
     with open(cache_file, 'w') as f:
         f.write(prompt + separator + result)
 
     return result
+
 
 def get_db_schema_text() -> str:
     """
@@ -55,54 +59,60 @@ def get_db_schema_text() -> str:
     return str(subprocess.check_output(['sqlite3', 'demo.db', '.schema']), 'utf-8')
 
 
-def english2sql(english_query: str, use_cache: bool = True) -> str:
+def english2sql(english_query: str, schema_text: Optional[str] = None, use_cache: bool = True) -> str:
     """
     Convert a query written in english to an SQL query.
 
     """
 
-    prompt = '''Q: Show me all of the users
-A: SELECT * FROM users;
-Q: Show me all the users ordered by age ascending
-A: SELECT * FROM users ORDER BY age ASC;
-Q: Who is the oldest user?
-A: SELECT * FROM users ORDER BY age DESC LIMIT 1;
-Q: What are the names of the 10 youngest users?
-A: SELECT name FROM users ORDER BY age ASC LIMIT 1;
-Q: Who is the oldest person?
-A: SELECT * FROM users ORDER BY age DESC LIMIT 1;
-Q: get all the users that are located in the United Kingdom
-A: SELECT * FROM users WHERE location = 'United Kingdom';
-Q: get users of ages between 30 and 40?
-A: SELECT * FROM users WHERE age BETWEEN '30' AND '40';
-Q: How many users are there?
-A: SELECT COUNT(*) FROM users;
-Q: Where does user Betty live?
-A: SELECT location FROM users WHERE name = 'Betty';
-Q: What is Jennifer's age?
-A: SELECT age FROM users WHERE name = 'Jennifer';
-Q: the average age
-A: SELECT AVG(age) FROM users;
-Q: the age of the oldest user
-A: SELECT MAX(age) FROM users;
-Q: the name of the oldest person
-A: SELECT name FROM users ORDER BY age DESC LIMIT 1;
-Q: the top 10 oldest users
-A: SELECT * FROM users ORDER BY age DESC LIMIT 10;
-Q: how many admin users are there?
-A: SELECT COUNT(*) FROM users WHERE is_admin = TRUE;
-Q: retrieve the email of the youngest admin
-A: SELECT email FROM users WHERE is_admin = true ORDER BY age ASC LIMIT 1;
-Q: get a user by their email
-A: SELECT * FROM users WHERE email = ?;
-Q: get all users' emails that live at a certain location
-A: SELECT * FROM users WHERE location = ?;
-Q: '''
+    # generate an English sentence describing the schema
+    if schema_text:
+        tables = parse_schema(schema_text)
+        created_tables = [t for t in tables if 'sqlite_sequence' not in t['table_name']]
+        if len(created_tables) == 0:
+            perror('Error: there are no tables')
+        db_spec = 'The database contains '
+        for table_idx, table in enumerate(created_tables):
+            table_name = table['table_name']
+            db_spec += 'a "' + table_name + '" table with the fields '
+            for field_idx, field in enumerate(table['fields']):
+                name = field['name']
+                type = field['type']
+                if name == 'id':
+                    continue
+                db_spec += name + ' (' + type_hint2schema_type(type) + ')';
+                if field_idx < len(table['fields'])-1:
+                    db_spec += ', '
+            db_spec += '; '
+        # always add this example table for GPT3
+        db_spec += 'and an "apples" table with the fields name (VARCHAR), weight (INTEGER), is_green (BOOLEAN).'
 
-    prompt += english_query.strip()
-    prompt += '\nA:'
+        prompt = (
+            f'Turn the following English sentences into valid SQLite statements. {db_spec}\n'
+            f'\n'
+            f'English: get all of the apples\n'
+            f'SQL: SELECT * FROM apples;\n'
+            f'\n'
+            f'English: get an apple\'s name by its id\n'
+            f'SQL: SELECT name FROM apples WHERE id = ?;\n'
+            f'\n'
+            f'English: create a new apple that is not green\n'
+            f'SQL: INSERT INTO apples (name, weight, is_green) VALUES (?, ?, false);\n'
+            f'\n'
+            f'English: {english_query.strip()}\n'
+            f'SQL:'
+        )
 
-    return cached_gpt3(prompt, use_cache=use_cache).strip()
+    else:
+        prompt = (
+            f'Turn the following English sentences into valid SQLite statements.\n'
+            f'\n'
+            f'English: {english_query.strip()}\n'
+            f'SQL:'
+        )
+
+    response = cached_gpt3(prompt, use_cache=use_cache).strip()
+    return response
 
 
 def english2summary_name(english_query: str, use_cache: bool = True) -> str:
@@ -168,12 +178,13 @@ def generate_endpoint(name: str,
 
     """
 
-    template = '''
-class OutputType_<<<NAME>>>(BaseModel):
-<<<OUTPUT_TYPES>>>
+    inputs, outputs = parse_query(sql_query, schema_text)
 
-@app.post("/<<<NAME>>>", response_model=List[OutputType_<<<NAME>>>])
-async def <<<NAME>>>(<<<PARAMS>>>) -> List[OutputType_<<<NAME>>>]:
+    template = '''
+<<<RESPONSE_CLASS>>>
+
+@app.post("/<<<NAME>>>", response_model=<<<RESPONSE_MODEL>>>)
+async def <<<NAME>>>(<<<PARAMS>>>) -> <<<RESPONSE_MODEL>>>:
     \'\'\'
     <<<ENGLISH_QUERY>>>
     ---
@@ -188,26 +199,36 @@ async def <<<NAME>>>(<<<PARAMS>>>) -> List[OutputType_<<<NAME>>>]:
         for k, v in zip(output_names, row):
             row_dict[k] = v
         res.append(row_dict)
-    return res
+    <<<RETURN_STATEMENT>>>
     '''
 
-    inputs, outputs = get_select_stmt_output_type(sql_query, schema_text)
-
     params = ', '.join(f'{c["name"]}: {c["type"]}' for c in inputs)
-    output_types = '    ' + '\n    '.join(f'{c["name"]}: {c["type"]}' for c in outputs)
     if len(inputs) > 0:
         bindings = '(' + ', '.join(c["name"] for c in inputs) + ',)'
     else:
         bindings = ''
     output_name_list = '[' + ', '.join([f'\'{c["name"]}\'' for c in outputs]) + ']'
 
+    if len(outputs) > 0:
+        response_model = f'List[OutputType_{name}]'
+        return_statement = 'return res'
+        response_class = \
+            f'class OutputType_{name}(BaseModel):\n' + \
+            '    ' + '\n    '.join(f'{c["name"]}: {c["type"]}' for c in outputs)
+    else:
+        response_model = 'None'
+        return_statement = 'return None'
+        response_class = ''
+
     template = template.replace('<<<NAME>>>', name)
     template = template.replace('<<<SQL_QUERY>>>', sql_query)
-    template = template.replace('<<<OUTPUT_TYPES>>>', output_types)
     template = template.replace('<<<PARAMS>>>', params)
     template = template.replace('<<<ENGLISH_QUERY>>>', original_english_query)
     template = template.replace('<<<BINDINGS>>>', bindings)
     template = template.replace('<<<OUTPUT_NAME_LIST>>>', output_name_list)
+    template = template.replace('<<<RESPONSE_MODEL>>>', response_model)
+    template = template.replace('<<<RETURN_STATEMENT>>>', return_statement)
+    template = template.replace('<<<RESPONSE_CLASS>>>', response_class)
     return template
 
 
@@ -241,7 +262,7 @@ con = sqlite3.connect('demo.db')
 
     schema_text = get_db_schema_text()
     query_names = [english2summary_name(q, use_cache=use_cache) for q in english_queries]
-    sql_queries = [english2sql(q, use_cache=use_cache) for q in english_queries]
+    sql_queries = [english2sql(q, schema_text, use_cache=use_cache) for q in english_queries]
 
     for name, query, english_query in zip(query_names, sql_queries, english_queries):
         endpoint = generate_endpoint(name, query, english_query, schema_text)
@@ -250,22 +271,133 @@ con = sqlite3.connect('demo.db')
     return code
 
 
-def generate_app(input_fn: str = 'queries.txt', output_fn: str = 'api.py', use_cache: bool = True):
+def read_plain_txt(input_fn: str) -> Tuple[List[str], List[str]]:
+    """
+    Parses the input_fn and returns a tuple of two lists of strings,
+    holding the migrations and queries respectively.
+
+    Formally,
+    (
+        [
+            <english str>,
+            ...
+        ],
+        [
+            <english str>,
+            ...
+        ]
+    )
+
+    """
+
+    with open(input_fn, 'r') as f:
+        migrations = []
+        queries = []
+        mode = 'none'
+        for line in f:
+            stripped = line.strip()
+            if len(stripped) == 0:
+                continue
+            if stripped.lower() == '== migrations':
+                if mode != 'none':
+                    perror(f'Invalid {input_fn}: The migrations section should appear first.')
+                mode = 'migrations'
+            elif stripped.lower() == '== queries':
+                if mode != 'migrations':
+                    perror(f'Invalid {input_fn}: The queries section should appear after the migrations section.')
+                mode = 'queries'
+            elif stripped[0] == '#':
+                pass
+            else:
+                if mode == 'migrations':
+                    migrations.append(stripped)
+                elif mode == 'queries':
+                    queries.append(stripped)
+                else:
+                    pass
+        return migrations, queries
+
+
+def run_necessary_migrations(sql_migrations: List[str], english_migrations: List[str]):
+    """
+    Given a list of all SQL migrations (can be any valid SQLite statements),
+    this function either determines that the given migrations are invalid
+    because old ones have been modified, or applies the new migrations.
+
+    Note: The given list should contain all migrations, not just new ones.
+          This function will check the English version, not the sql version.
+    """
+
+
+    con = sqlite3.connect('demo.db')
+    cur = con.cursor()
+
+    cur.execute('''
+        SELECT name FROM sqlite_master WHERE type='table' AND name = '__plainapi_migrations';
+    ''')
+    rows = cur.fetchall()
+    if len(rows) == 0:
+        # create the table
+        cur.execute('''
+            CREATE TABLE __plainapi_migrations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                sql_query VARCHAR(500) NOT NULL, 
+                english_query VARCHAR(500) NOT NULL
+            );
+        ''')
+        existing_migrations = []
+    else:
+        cur.execute('''
+            SELECT sql_query, english_query FROM __plainapi_migrations ORDER BY id ASC;
+        ''')
+        existing_migrations = []
+        for sql_query, english_query in cur.fetchall():
+            existing_migrations.append({'sql': sql_query, 'english': english_query})
+
+    # ensure the existing migrations are correct
+    for a, b in zip(existing_migrations, english_migrations):
+        if a['english'] != b:
+            perror(f'Invalid previously applied migration (it has been changed):\n  "{a["english"]}" -> "{b}"')
+
+    if len(sql_migrations) != len(english_migrations):
+        perror('Internal: There are more SQL migrations than original English migrations')
+
+    if len(existing_migrations) < len(sql_migrations):
+        print('Running migrations...')
+        for idx, (sql, english) in enumerate(zip(sql_migrations, english_migrations)):
+            if idx < len(existing_migrations):
+                pass
+            else:
+                print(f'  ...{english}')
+                cur.execute(sql)
+                cur.execute('''
+                    INSERT INTO __plainapi_migrations (sql_query, english_query) VALUES (?, ?);
+                ''', (sql, english,))
+        print('All up to date.')
+    else:
+        print('No migrations to run.')
+
+    con.commit()
+
+
+def generate_app(input_fn: str = 'plain.txt', output_fn: str = 'api.py', use_cache: bool = True):
     """
     Given a file of English sentences, output a file containing a FastAPI web server.
 
     """
 
-    with open(input_fn, 'r') as f:
-        queries = f.read().split('\n\n')
-
-    queries = [q.strip() for q in queries]
-    queries = [q for q in queries if len(q) > 0]
+    english_migrations, english_queries = read_plain_txt(input_fn)
+    print('Migrations:')
+    for english_migration in english_migrations:
+        print(f' -> {english_migration}')
     print('Queries:')
-    for query in queries:
-        print(f' -> {query}')
+    for english_query in english_queries:
+        print(f' -> {english_query}')
 
-    code = generate_app_from_english_queries(queries)
+    sql_migrations = [english2sql(m, use_cache=use_cache) for m in english_migrations]
+    run_necessary_migrations(sql_migrations, english_migrations)
+
+    code = generate_app_from_english_queries(english_queries)
     with open(output_fn, 'w') as f:
         f.write(code)
 
@@ -275,3 +407,4 @@ def generate_app(input_fn: str = 'queries.txt', output_fn: str = 'api.py', use_c
 
 if __name__ == '__main__':
     Fire(generate_app)
+
