@@ -6,3 +6,9 @@ cache/
 *.swp
 *.swo
 api.py
+
+node_modules/
+frontend/.next/
+frontend/generated/
+__pycache__/
+.mypy_cache/
