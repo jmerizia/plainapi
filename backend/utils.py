@@ -1,17 +1,11 @@
-from botocore.exceptions import ClientError
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
-from jose import jwt
-from typing import Optional
-import boto3
-import json
-import random
+from typing import List, Dict, Generic, TypeVar
 import os
 
-from models import RecordId, Token, User
+from models import Endpoint, Field, RecordId, User, UserPublic
 
+T = TypeVar('T')
 
-"""
+r"""
  _   _ _   _ _     
 | | | | | (_) |    
 | | | | |_ _| |___ 
@@ -29,5 +23,9 @@ def expect_env(varname: str) -> str:
         result: str = val
         return result
 
-load_dotenv()
-APP_ROOT_URL   = expect_env("APP_ROOT_URL")
+def clean_user(user: User) -> UserPublic:
+    return UserPublic(
+        id=user.id,
+        is_admin=user.is_admin,
+        joined=user.joined
+    )

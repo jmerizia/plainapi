@@ -1,4 +1,4 @@
-from typing import Optional, List, Literal
+from typing import List
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -13,24 +13,35 @@ class Token(BaseModel):
 class User(BaseModel):
     id: RecordId
     email: str
-    nickname: str
-    score: int
+    hashed_password: str
     is_admin: bool
-    verified: bool
-    rank: Optional[int]
+    joined: datetime
+
+class UserPublic(BaseModel):
+    id: RecordId
+    is_admin: bool
+    joined: datetime
+
+class Field(BaseModel):
+    id: RecordId
+    value: str
+    endpoint_id: RecordId
+    location: int
     created: datetime
     updated: datetime
 
 class Endpoint(BaseModel):
     id: RecordId
-    user_id: RecordId
+    title: str
+    method: str
+    location: int
+    api_id: RecordId
     created: datetime
     updated: datetime
 
-class Field(BaseModel):
+class API(BaseModel):
     id: RecordId
-    method: str
-    endpoint_id: RecordId
-    value: str
+    title: str
+    user_id: RecordId
     created: datetime
     updated: datetime

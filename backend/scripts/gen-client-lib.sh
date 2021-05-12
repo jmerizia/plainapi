@@ -8,4 +8,4 @@ mypy .
 python ./emit_openapi.py > openapi.json
 
 # Generate TypeScript interfaces and classes
-npx openapi-generator-cli generate -i openapi.json -g typescript-fetch -o ../frontend/generated
+npx openapi-generator-cli generate -i openapi.json -g typescript-fetch -o ../frontend/src/generated

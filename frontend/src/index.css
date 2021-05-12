@@ -27,6 +27,8 @@ code {
   flex: 1;
   flex-direction: column;
   border-right: 1px solid lightgrey;
+  overflow: scroll;
+  height: 100%;
 }
 
 .App-title-input {
