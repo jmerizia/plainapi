@@ -1,4 +1,5 @@
-from typing import List
+from typing import List, Union, Literal
+from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -22,26 +23,15 @@ class UserPublic(BaseModel):
     is_admin: bool
     joined: datetime
 
-class Field(BaseModel):
-    id: RecordId
-    value: str
-    endpoint_id: RecordId
-    location: int
-    created: datetime
-    updated: datetime
-
 class Endpoint(BaseModel):
     id: RecordId
-    title: str
-    method: str
-    location: int
-    api_id: RecordId
-    created: datetime
-    updated: datetime
+    method: str #  Literal['GET', 'POST', 'PATCH', 'DELETE']
+    value: str
 
 class API(BaseModel):
     id: RecordId
     title: str
+    endpoints: List[Endpoint]
     user_id: RecordId
     created: datetime
     updated: datetime

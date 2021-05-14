@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import jwt
 import bcrypt
 
-from models import RecordId, Token, User, UserPublic, API, Endpoint, Field
+from models import RecordId, Token, User, UserPublic, API, Endpoint
 from utils import expect_env, clean_user
 import queries
 
@@ -60,18 +60,6 @@ async def get_current_api(api_id: RecordId) -> API:
     if api is None:
         raise HTTPException(status_code=400, detail='No such api')
     return api
-
-async def get_current_endpoint(endpoint_id: RecordId) -> Endpoint:
-    endpoint = queries.select_endpoint_by_id(id=endpoint_id)
-    if endpoint is None:
-        raise HTTPException(status_code=400, detail='No such endpoint')
-    return endpoint
-
-async def get_current_field(field_id: RecordId) -> Field:
-    field = queries.select_field_by_id(id=field_id)
-    if field is None:
-        raise HTTPException(status_code=400, detail='No such field')
-    return field
 
 r"""
  _   _                   
@@ -156,12 +144,13 @@ r"""
 
 @app.post(PREFIX + '/apis/create', response_model=API)
 async def create_api(title: str,
+                     serialized_endpoints: str,
                      user_id: RecordId,
                      current_user: User = Depends(get_current_user)) -> API:
     if user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=401, detail='Unauthorized request')
     now = datetime.utcnow()
-    return queries.insert_api(title=title, user_id=user_id, created=now, updated=now)
+    return queries.insert_api(title=title, serialized_endpoints=serialized_endpoints, user_id=user_id, created=now, updated=now)
 
 @app.get(PREFIX + '/apis/get-by-id/', response_model=API)
 async def read_api(current_user: User = Depends(get_current_user),
@@ -179,176 +168,19 @@ async def read_apis_for_user(user_id: RecordId,
 
 @app.patch(PREFIX + '/apis/update/', response_model=None)
 async def update_api(title: Optional[str] = None,
+                     serialized_endpoints: Optional[str] = None,
                      current_user: User = Depends(get_current_user),
                      api: API = Depends(get_current_api)) -> None:
     if not current_user.is_admin and current_user.id != api.user_id:
         raise HTTPException(status_code=401, detail='Unauthorized request')
     now = datetime.utcnow()
-    queries.update_api(id=api.id, title=title, updated=now)
+    queries.update_api(id=api.id, title=title, serialized_endpoints=serialized_endpoints, updated=now)
 
 @app.delete(PREFIX + '/apis/delete/', response_model=None)
 async def delete_api(current_user: User = Depends(get_current_user), api: API = Depends(get_current_api)) -> None:
     if not current_user.is_admin and current_user.id != api.user_id:
         raise HTTPException(status_code=401, detail='Unauthorized request')
     queries.delete_api(id=api.id)
-
-r"""
- _____          _             _       _       
-|  ___|        | |           (_)     | |      
-| |__ _ __   __| |_ __   ___  _ _ __ | |_ ___ 
-|  __| '_ \ / _` | '_ \ / _ \| | '_ \| __/ __|
-| |__| | | | (_| | |_) | (_) | | | | | |_\__ \
-\____/_| |_|\__,_| .__/ \___/|_|_| |_|\__|___/
-                 | |                          
-                 |_|                          
-"""
-
-@app.post(PREFIX + "/endpoint/create", response_model=Endpoint)
-async def create_endpoint(title: str,
-                          location: int,
-                          method: str,
-                          current_user: User = Depends(get_current_user),
-                          api: API = Depends(get_current_api)) -> Endpoint:
-    if not current_user.is_admin and api.user_id != current_user.id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    print(api.user_id, current_user.id)
-    now = datetime.utcnow()
-    existing_endpoints = sorted(queries.select_endpoints_for_api(api_id=api.id), key=lambda e: e.location)
-    cur = 0
-    for endpoint in existing_endpoints:
-        if cur == location:
-            # skip over this endpoint
-            cur += 1
-        queries.update_endpoint(id=endpoint.id, location=cur)
-        cur += 1
-    new_endpoint = queries.insert_endpoint(title=title, api_id=api.id, location=location, method=method, created=now, updated=now)
-    return new_endpoint
-
-@app.get(PREFIX + "/endpoint/read/", response_model=Endpoint)
-async def read_endpoint(current_user: User = Depends(get_current_user),
-                        endpoint: Endpoint = Depends(get_current_endpoint),
-                        api: API = Depends(get_current_api)) -> Endpoint:
-    if not current_user.is_admin and endpoint.id != api.user_id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    if endpoint.api_id != api.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    return endpoint
-
-@app.get(PREFIX + "/endpoint/read-all-for-api", response_model=List[Endpoint])
-async def read_endpoints_for_api(current_user: User = Depends(get_current_user),
-                                 api: API = Depends(get_current_api)) -> List[Endpoint]:
-    if not current_user.is_admin and api.user_id != current_user.id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    endpoints = queries.select_endpoints_for_api(api_id=api.id)
-    return endpoints
-
-@app.patch(PREFIX + "/endpoint/update/", response_model=None)
-async def update_endpoint(title: Optional[str] = None,
-                          location: Optional[int] = None,
-                          method: Optional[str] = None,
-                          current_user: User = Depends(get_current_user),
-                          endpoint: Endpoint = Depends(get_current_endpoint),
-                          api: API = Depends(get_current_api)) -> None:
-    if not current_user.is_admin and api.user_id != current_user.id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    if endpoint.api_id != api.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    now = datetime.utcnow()
-    queries.update_endpoint(id=endpoint.id, title=title, location=location, method=method, updated=now)
-
-@app.delete(PREFIX + "/endpoint/delete/", response_model=None)
-async def delete_endpoint(current_user: User = Depends(get_current_user),
-                          endpoint: Endpoint = Depends(get_current_endpoint),
-                          api: API = Depends(get_current_api)) -> None:
-    if not current_user.is_admin and api.user_id != current_user.id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    if endpoint.api_id != api.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    queries.delete_endpoint(id=endpoint.id)
-
-r"""
-______ _      _     _     
-|  ___(_)    | |   | |    
-| |_   _  ___| | __| |___ 
-|  _| | |/ _ \ |/ _` / __|
-| |   | |  __/ | (_| \__ \
-\_|   |_|\___|_|\__,_|___/
-                          
-"""
-
-@app.post(PREFIX + "/field/create", response_model=Field)
-async def create_field(value: str,
-                       location: int,
-                       current_user: User = Depends(get_current_user),
-                       endpoint: Endpoint = Depends(get_current_endpoint),
-                       api: API = Depends(get_current_api)) -> Field:
-    if not current_user.is_admin and current_user.id != api.user_id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    if endpoint.api_id != api.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    now = datetime.utcnow()
-    existing_fields = sorted(queries.select_fields_for_endpoint(endpoint_id=endpoint.id), key=lambda f: f.location)
-    cur = 0
-    for field in existing_fields:
-        if cur == location:
-            # skip over field
-            cur += 1
-        queries.update_field(id=field.id, location=cur)
-        cur += 1
-    new_field = queries.insert_field(value=value, location=cur, endpoint_id=endpoint.id, created=now, updated=now)
-    return new_field
-
-@app.get(PREFIX + "/field/read", response_model=Field)
-async def read_field(current_user: User = Depends(get_current_user),
-                     field: Field = Depends(get_current_field),
-                     endpoint: Endpoint = Depends(get_current_endpoint),
-                     api: API = Depends(get_current_api)) -> Field:
-    if not current_user.is_admin and current_user.id != api.user_id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    if endpoint.api_id != api.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    if field.endpoint_id != endpoint.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    return field
-
-@app.get(PREFIX + "/field/read-for-endpoint", response_model=List[Field])
-async def read_fields_for_endpoint(current_user: User = Depends(get_current_user),
-                                   endpoint: Endpoint = Depends(get_current_endpoint),
-                                   api: API = Depends(get_current_api)) -> List[Field]:
-    if not current_user.is_admin and current_user.id != api.user_id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    if endpoint.api_id != api.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    return queries.select_fields_for_endpoint(endpoint_id=endpoint.id)
-
-@app.patch(PREFIX + "/field/update/", response_model=None)
-async def update_field(value: Optional[str] = None,
-                       location: Optional[int] = None,
-                       current_user: User = Depends(get_current_user),
-                       endpoint: Endpoint = Depends(get_current_endpoint),
-                       api: API = Depends(get_current_api),
-                       field: Field = Depends(get_current_field)) -> None:
-    if not current_user.is_admin and current_user.id != api.user_id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    if endpoint.api_id != api.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    if field.endpoint_id != endpoint.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    now = datetime.utcnow()
-    queries.update_field(id=field.id, value=value, location=location, updated=now)
-
-@app.delete(PREFIX + "/field/delete/", response_model=None)
-async def delete_field(current_user: User = Depends(get_current_user),
-                       endpoint: Endpoint = Depends(get_current_endpoint),
-                       api: API = Depends(get_current_api),
-                       field: Field = Depends(get_current_field)) -> None:
-    if not current_user.is_admin and current_user.id != api.user_id:
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    if endpoint.api_id != api.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    if field.endpoint_id != endpoint.id:
-        raise HTTPException(status_code=400, detail='Invalid Request')
-    queries.delete_field(id=field.id)
 
 r"""
            _          

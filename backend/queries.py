@@ -4,7 +4,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import json
 
-from models import RecordId, User, API, Endpoint, Field
+from models import RecordId, User, API, Endpoint
 from utils import expect_env
 
 
@@ -14,8 +14,6 @@ DATABASE_URL = expect_env("DATABASE_URL")
 con = sqlite3.connect(DATABASE_URL.split(':')[-1])
 cur = con.cursor()
 
-
-# USER
 
 def insert_user(email: str, hashed_password: str, is_admin: bool, joined: datetime) -> User:
     id = cur.execute('''
@@ -100,13 +98,10 @@ def delete_user(id: int) -> None:
     ''', (id, ))
     con.commit()
 
-
-# API
-
-def insert_api(title: str, user_id: RecordId, created: datetime, updated: datetime) -> API:
+def insert_api(title: str, serialized_endpoints: str, user_id: RecordId, created: datetime, updated: datetime) -> API:
     id = cur.execute('''
-        INSERT INTO apis (title, user_id, created, updated) VALUES (?, ?, ?, ?);
-    ''', (title, user_id, created.isoformat(), updated.isoformat())).lastrowid
+        INSERT INTO apis (title, endpoints, user_id, created, updated) VALUES (?, ?, ?, ?, ?);
+    ''', (title, serialized_endpoints, user_id, created.isoformat(), updated.isoformat())).lastrowid
     con.commit()
     api = select_api_by_id(id=id)
     if api is None:
@@ -114,7 +109,7 @@ def insert_api(title: str, user_id: RecordId, created: datetime, updated: dateti
     return api
 
 def select_api_by_id(id: RecordId) -> Optional[API]:
-    cols = ['id', 'title', 'user_id', 'created', 'updated']
+    cols = ['id', 'title', 'endpoints', 'user_id', 'created', 'updated']
     row = cur.execute(f'''
         SELECT {', '.join(cols)} FROM apis WHERE id = ?;
     ''', (id, )).fetchone()
@@ -126,13 +121,14 @@ def select_api_by_id(id: RecordId) -> Optional[API]:
     return API(
         id=d['id'],
         title=d['title'],
+        endpoints=json.loads(d['endpoints']),
         user_id=d['user_id'],
         created=datetime.fromisoformat(d['created']),
         updated=datetime.fromisoformat(d['updated'])
     )
 
 def select_apis_for_user(user_id: RecordId) -> List[API]:
-    cols = ['id', 'title', 'user_id', 'created', 'updated']
+    cols = ['id', 'title', 'endpoints', 'user_id', 'created', 'updated']
     rows = cur.execute(f'''
         SELECT {', '.join(cols)} FROM apis WHERE user_id = ?;
     ''', (user_id, )).fetchall()
@@ -144,6 +140,7 @@ def select_apis_for_user(user_id: RecordId) -> List[API]:
         api = API(
             id=d['id'],
             title=d['title'],
+            endpoints=json.loads(d['endpoints']),
             user_id=d['user_id'],
             created=datetime.fromisoformat(d['created']),
             updated=datetime.fromisoformat(d['updated'])
@@ -151,11 +148,15 @@ def select_apis_for_user(user_id: RecordId) -> List[API]:
         apis.append(api)
     return apis
 
-def update_api(id: RecordId, title: Optional[str] = None, user_id: Optional[RecordId] = None, created: Optional[datetime] = None, updated: Optional[datetime] = None) -> None:
+def update_api(id: RecordId, title: Optional[str] = None, serialized_endpoints: Optional[str] = None, user_id: Optional[RecordId] = None, created: Optional[datetime] = None, updated: Optional[datetime] = None) -> None:
     if title is not None:
         cur.execute('''
             UPDATE apis SET title = ? WHERE id = ?;
         ''', (title, id, ))
+    if serialized_endpoints is not None:
+        cur.execute('''
+            UPDATE apis SET endpoints = ? WHERE id = ?;
+        ''', (serialized_endpoints, id, ))
     if user_id is not None:
         cur.execute('''
             UPDATE apis SET user_id = ? WHERE id = ?;
@@ -173,175 +174,5 @@ def update_api(id: RecordId, title: Optional[str] = None, user_id: Optional[Reco
 def delete_api(id: RecordId) -> None:
     cur.execute('''
         DELETE FROM apis WHERE id = ?;
-    ''', (id, ))
-    con.commit()
-
-
-# ENDPOINT
-
-def insert_endpoint(title: str, api_id: RecordId, location: int, method: str, created: datetime, updated: datetime) -> Endpoint:
-    id = cur.execute('''
-        INSERT INTO endpoints (title, location, method, api_id, created, updated) VALUES (?, ?, ?, ?, ?, ?);
-    ''', (title, location, method, api_id, created, updated, )).lastrowid
-    con.commit()
-    endpoint = select_endpoint_by_id(id=id)
-    if endpoint is None:
-        raise ValueError('Expected endpoint to exist')
-    return endpoint
-
-def select_endpoint_by_id(id: RecordId) -> Optional[Endpoint]:
-    cols = ['id', 'title', 'location', 'method', 'api_id', 'created', 'updated']
-    row = cur.execute(f'''
-        SELECT {', '.join(cols)} FROM endpoints WHERE id = ?;
-    ''', (id, )).fetchone()
-    if row is None:
-        return None
-    d: Any = dict()
-    for k, v in zip(cols, row):
-        d[k] = v
-    return Endpoint(
-        id=d['id'],
-        title=d['title'],
-        location=d['location'],
-        method=d['method'],
-        api_id=d['api_id'],
-        created=datetime.fromisoformat(d['created']),
-        updated=datetime.fromisoformat(d['updated']),
-    )
-
-def select_endpoints_for_api(api_id: RecordId) -> List[Endpoint]:
-    cols = ['id', 'title', 'location', 'method', 'api_id', 'created', 'updated']
-    rows = cur.execute(f'''
-        SELECT {', '.join(cols)} FROM endpoints WHERE api_id = ?;
-    ''', (api_id, )).fetchall()
-    endpoints: List[Endpoint] = []
-    for row in rows:
-        d: Any = dict()
-        for k, v in zip(cols, row):
-            d[k] = v
-        endpoint = Endpoint(
-            id=d['id'],
-            title=d['title'],
-            location=d['location'],
-            method=d['method'],
-            api_id=d['api_id'],
-            created=datetime.fromisoformat(d['created']),
-            updated=datetime.fromisoformat(d['updated']),
-        )
-        endpoints.append(endpoint)
-    return endpoints
-
-def update_endpoint(id: RecordId, title: Optional[str] = None, location: Optional[int] = None, method: Optional[str] = None, api_id: Optional[RecordId] = None, created: Optional[datetime] = None, updated: Optional[datetime] = None) -> None:
-    if title is not None:
-        cur.execute('''
-            UPDATE endpoints SET title = ? WHERE id = ?;
-        ''', (title, id, ))
-    if location is not None:
-        cur.execute('''
-            UPDATE endpoints SET location = ? WHERE id = ?;
-        ''', (location, id, ))
-    if method is not None:
-        cur.execute('''
-            UPDATE endpoints SET method = ? WHERE id = ?;
-        ''', (method, id, ))
-    if api_id is not None:
-        cur.execute('''
-            UPDATE endpoints SET api_id = ? WHERE id = ?;
-        ''', (api_id, id, ))
-    if created is not None:
-        cur.execute('''
-            UPDATE endpoints SET created = ? WHERE id = ?;
-        ''', (created.isoformat(), id, ))
-    if updated is not None:
-        cur.execute('''
-            UPDATE endpoints SET updated = ? WHERE id = ?;
-        ''', (updated.isoformat(), id, ))
-    con.commit()
-
-def delete_endpoint(id: RecordId) -> None:
-    cur.execute('''
-        DELETE FROM endpoints WHERE id = ?;
-    ''', (id, ))
-    con.commit()
-
-
-# FIELD
-
-def insert_field(value: str, location: int, endpoint_id: RecordId, created: datetime, updated: datetime) -> Field:
-    id = cur.execute('''
-        INSERT INTO fields (value, location, endpoint_id, created, updated) VALUES (?, ?, ?, ?, ?);
-    ''', (value, location, endpoint_id, created, updated)).lastrowid
-    con.commit()
-    field = select_field_by_id(id=id)
-    if field is None:
-        raise ValueError('Unexpected field is None')
-    return field
-
-def select_field_by_id(id: RecordId) -> Optional[Field]:
-    cols = ['id', 'value', 'location', 'endpoint_id', 'created', 'updated']
-    row = cur.execute(f'''
-        SELECT {', '.join(cols)} FROM fields WHERE id = ?;
-    ''', (id, )).fetchone()
-    if row is None:
-        return None
-    d: Any = dict()
-    for k, v in zip(cols, row):
-        d[k] = v
-    return Field(
-        id=d['id'],
-        value=d['value'],
-        location=d['location'],
-        endpoint_id=d['endpoint_id'],
-        created=datetime.fromisoformat(d['created']),
-        updated=datetime.fromisoformat(d['updated']),
-    )
-
-def select_fields_for_endpoint(endpoint_id: RecordId) -> List[Field]:
-    cols = ['id', 'value', 'location', 'endpoint_id', 'created', 'updated']
-    rows = cur.execute(f'''
-        SELECT {', '.join(cols)} FROM fields WHERE endpoint_id = ?;
-    ''', (endpoint_id, )).fetchall()
-    fields: List[Field] = []
-    for row in rows:
-        d: Any = dict()
-        for k, v in zip(cols, row):
-            d[k] = v
-        field = Field(
-            id=d['id'],
-            value=d['value'],
-            location=d['location'],
-            endpoint_id=d['endpoint_id'],
-            created=datetime.fromisoformat(d['created']),
-            updated=datetime.fromisoformat(d['updated']),
-        )
-        fields.append(field)
-    return fields
-
-def update_field(id: RecordId, value: Optional[str] = None, location: Optional[int] = None, endpoint_id: Optional[RecordId] = None, created: Optional[datetime] = None, updated: Optional[datetime] = None) -> None:
-    if value is not None:
-        cur.execute('''
-            UPDATE fields SET value = ? WHERE id = ?;
-        ''', (value, id, ))
-    if location is not None:
-        cur.execute('''
-            UPDATE fields SET location = ? WHERE id = ?;
-        ''', (location, id, ))
-    if endpoint_id is not None:
-        cur.execute('''
-            UPDATE fields SET endpoint_id = ? WHERE id = ?;
-        ''', (endpoint_id, id, ))
-    if created is not None:
-        cur.execute('''
-            UPDATE fields SET created = ? WHERE id = ?;
-        ''', (created.isoformat(), id, ))
-    if updated is not None:
-        cur.execute('''
-            UPDATE fields SET updated = ? WHERE id = ?;
-        ''', (updated.isoformat(), id, ))
-    con.commit()
-
-def delete_field(id: RecordId) -> None:
-    cur.execute('''
-        DELETE FROM fields WHERE id = ?;
     ''', (id, ))
     con.commit()

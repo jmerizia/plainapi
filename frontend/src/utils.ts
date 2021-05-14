@@ -1,7 +1,5 @@
-import { useEffect, useState, } from 'react';
-import { Configuration, DefaultApi } from './generated';
-import { actions } from './redux';
-import { AppState, API, Endpoint, EndpointMethod, Field } from './types';
+import { useEffect, useState, useMemo } from 'react';
+import { Configuration, DefaultApi, API } from './generated';
 
 
 export async function wait(ms: number): Promise<void> {
@@ -11,10 +9,10 @@ export async function wait(ms: number): Promise<void> {
 export function useBackend() {
     const [currentUserId, setCurrentUserId] = useState<number | undefined>();
     const [token, setToken] = useState<string | undefined>();
-    const backend = new DefaultApi(new Configuration({
+    const backend = useMemo(() => new DefaultApi(new Configuration({
         basePath: 'http://localhost:3001',
         accessToken: token ? 'Bearer ' + token : undefined,
-    }));
+    })), [token]);
 
     const getCredentials = (): { userid: number, token: string } | undefined => {
         const userid = localStorage.getItem('userid');
@@ -59,88 +57,42 @@ export function useBackend() {
     return { backend, currentUserId, login, logout };
 }
 
-export function randomRecordId(): string { return Math.floor(Math.random() * 1000000).toString(); }
-
-export function parseEndpointMethod(method: string): EndpointMethod {
-    switch (method) {
-        case 'GET':
-            return 'GET';
-        case 'POST':
-            return 'POST';
-        case 'DELETE':
-            return 'DELETE';
-        case 'PATCH':
-            return 'PATCH';
-        default:
-            throw Error('Invalid method');
-    }
-}
-
-export async function fetchApi(backend: DefaultApi, apiId: number): Promise<API> {
-    const api = await backend.readApiApiV0ApisGetByIdGet({ apiId });
-    const endpoints = await backend.readEndpointsForApiApiV0EndpointReadAllForApiGet({ apiId })
-    return {
-        id: randomRecordId(),  // doing this here to catch errors early
-        realId: api.id,
-        title: api.title,
-        endpoints: await Promise.all(endpoints.map(async (endpoint): Promise<Endpoint> => {
-            return {
-                id: randomRecordId(),  // same as above
-                realId: endpoint.id,
-                title: endpoint.title,
-                location: endpoint.location,
-                method: parseEndpointMethod(endpoint.method),
-                fields: (await backend.readFieldsForEndpointApiV0FieldReadForEndpointGet({
-                    apiId,
-                    endpointId: endpoint.id,
-                })).map((field): Field => {
-                    return {
-                        id: randomRecordId(),  // same as above
-                        realId: field.id,
-                        value: field.value,
-                        location: field.location,
-                        indent: 0,
-                        created: field.created.getTime(),
-                        updated: field.updated.getTime(),
-                    };
-                }),
-                created: endpoint.created.getTime(),
-                updated: endpoint.updated.getTime(),
-            }
-        })),
-        created: api.created.getTime(),
-        updated: api.updated.getTime(),
-    }
-}
-
 export async function fetchApiIdsForUser(backend: DefaultApi, userId: number): Promise<number[]> {
     const apis = await backend.readApisForUserApiV0ApisGetAllForUserGet({ userId });
     return apis.map(api => api.id);
 }
 
-export type WithLocation<T> = T & { location: number };
+export function insertElementAt<T>(ar: T[], e: T, location: number): T[] {
+    const nar = ar.slice();
+    nar.splice(location, 0, e);
+    return nar;
+}
 
-export function addElementAt<T>(arr: WithLocation<T>[], location: number, newEl: WithLocation<T>): WithLocation<T>[] {
-    if (arr.length === 0) {
-        return [{ ...newEl, location }];
-    }
-    const arrSorted = arr.sort((a, b) => a.location - b.location);
-    const newArr: WithLocation<T>[] = [];
-    let cur = 0;
-    for (let i = 0; i < arrSorted.length; i++) {
-        const el = arrSorted[i];
-        newArr.push({ ...el, location: cur });
-        if (cur === location) {
-            newArr.push({ ...newEl, location, });
-            cur++;
-        }
-        cur++;
-    }
-    if (location === arr.length) {
-        newArr.push({ ...newEl, location })
-    }
-    console.log('after', newArr);
-    return newArr;
+export function removeElementAt<T>(ar: T[], location: number): T[] {
+    const nar = ar.slice();
+    nar.splice(location, 1);
+    return nar;
+}
+
+export function updateElementAt<T>(ar: T[], v: T, location: number): T[] {
+    const nar = ar.slice();
+    nar[location] = v;
+    return nar;
+}
+
+export function swapElementsAt<T>(ar: T[], a: number, b: number): T[] {
+    const nar = ar.slice();
+    const tmp = nar[a];
+    nar[a] = nar[b];
+    nar[b] = tmp;
+    return nar;
+}
+
+export function moveElementFromTo<T>(ar: T[], s: number, t: number): T[] {
+    const nar = ar.slice();
+    const [removed] = nar.splice(s, 1);
+    nar.splice(t, 0, removed);
+    return nar;
 }
 
 export function logError(err: any) {

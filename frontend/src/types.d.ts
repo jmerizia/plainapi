@@ -1,50 +1,48 @@
-declare type GlobalFetch = WindowOrWorkerGlobalScope;
+import { API } from './generated';
+import {
+    Text,
+    Descendant,
+    BaseEditor,
+} from 'slate'
+import { ReactEditor } from 'slate-react'
+import { HistoryEditor } from 'slate-history'
+  
 
-export type RealId = number | 'unknown';
+declare module "*.png";
+declare module "*.svg";
 
-export type Field = {
-    id: string;
-    realId: RealId;
-    value: string;
-    location: number;
-    indent: number;
-    created: number;
-    updated: number;
-}
-
-export type EndpointMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 export type Endpoint = {
-    id: string;
-    realId: RealId;
-    title: string;
-    method: EndpointMethod;
-    location: number;
-    fields: Field[];
-    created: number;
-    updated: number;
-}
-
-export type API = {
-    id: string;
-    realId: RealId;
-    title: string;
-    endpoints: Endpoint[];
-    created: number;
-    updated: number;
-}
-
-export type User = {
-    id: string;
-    realId: RealId;
-    isAdmin: boolean;
-    joined: number;
+    id: number;
+    method: string;
+    value: string;
 };
 
-export type AppStatus = 'loading' | 'saving' | 'ready';
-
-interface AppState {
-    apis: API[];
-    status: AppStatus;
+export type AppState = {
+    api?: API;
+    saving: boolean;
     currentUser?: User;
+};
+
+
+export type TitleElement = { type: 'title'; children: Descendant[] };
+export type ParagraphElement = { type: 'paragraph'; children: Descendant[] };
+export type CustomElement = TitleElement | ParagraphElement;
+export type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
+export type CustomText = {
+    bold?: boolean;
+    italic?: boolean;
+    code?: boolean;
+    text: string;
+}
+export type EmptyText = {
+    text: string;
+}
+
+declare module 'slate' {
+    interface CustomTypes {
+        Editor: CustomEditor;
+        Element: CustomElement;
+        Text: CustomText | EmptyText;
+    }
 }

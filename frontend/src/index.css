@@ -12,18 +12,18 @@ code {
     monospace;
 }
 
-.App {
+.container {
   display: flex;
   position: absolute;
   width: 100%;
   height: 100%;
 }
 
-.App-preview {
+.preview {
   flex: 1;
 }
 
-.App-editor {
+.editor {
   flex: 1;
   flex-direction: column;
   border-right: 1px solid lightgrey;
@@ -31,7 +31,7 @@ code {
   height: 100%;
 }
 
-.App-title-input {
+.title-input {
   font-size: 35px;
   font-weight: bold;
   border: none;
@@ -39,58 +39,7 @@ code {
   padding: 10px;
 }
 
-.FieldComponent-container {
-  padding-left: 10px;
-  display: flex;
-  margin-top: 0px;
-  margin-bottom: 0px;
-}
-
-.FieldComponent-input {
-  border: none;
-  outline: none;
-  font-size: 18px;
-  padding-left: 10px;
-  border-left: thin solid lightgrey;
-  flex: 1;
-  flex-direction: row;
-  line-height: 1.5em;
-}
-
-.FieldComponent-line-number {
-  font-family: monospace;
-  color: grey;
-  font-size: 17px;
-  padding-right: 10px;
-  width: 20px;
-  text-align: center;
-  position: relative;
-  align-self: center;
-}
-
-.EndpointComponent-container {
-  padding: 10px;
-  margin: 5px;
-  /* border: thin solid lightgrey; */
-  border-radius: 10px;
-  position: relative;
-}
-
-.EndpointComponent-title {
-  font-weight: bold;
-  border: none;
-  outline: none;
-  font-size: 18px;
-  margin-bottom: 9px;
-}
-
-.EndpointComponent-method {
-  position: absolute;
-  right: 5px;
-  top: 5px;
-}
-
-.App-add-endpoint-button {
+.add-endpoint-button {
   border: thin solid lightgrey;
   padding: 5px;
   border-radius: 4px;
@@ -101,44 +50,73 @@ code {
   margin: 0 auto;
 }
 
-.App-add-endpoint-button-text {
+.add-endpoint-button-text {
   font-size: 25px;
   text-align: center;
   position: relative;
   top: -8px;
 }
 
-
-.App-add-endpoint-button:hover {
+.add-endpoint-button:hover {
   background-color: lightgrey;
   cursor: pointer;
 }
 
-.App-editor-row {
+.editor-row {
   flex: 1;
-  padding-bottom: 5px;
+  margin-bottom: 10px;
 }
 
-.EndpointComponent-delete-button {
-  padding: 5px;
-  border: none;
+.editor-endpoint {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+}
+
+.editor-input {
+  flex: 1;
+  border-radius: 5px;
+  padding: 6px;
+  font-size: 18px;
+  border: thin solid lightgrey;
+  outline: none;
+}
+
+.editor-input:focus {
+  outline: thin solid grey;
+}
+
+.editor-remove-button {
+  padding: 4px;
   border-radius: 4px;
-  background-color: white;
   width: 25px;
   height: 25px;
-  text-align: center;
-  position: absolute;
-  right: 4px;
-  top: 4px;
-}
-
-.EndpointComponent-delete-button:hover {
-  background-color: lightgrey;
+  margin: 4px;
+  text-decoration: none;
+  font-weight: bold;
+  color: grey;
+  border: none;
+  background-color: transparent;
   cursor: pointer;
+  position: relative;
+  top: 1px;
+  font-size: 0.9em;
+  display: flex;
+  flex-direction: column;
 }
 
-.EndpointComponent-delete-button-text {
-  font-size: 20px;
+.editor-remove-button:hover {
+  background-color: #eee;
+}
+
+.editor-drag-bar {
+  height: 22px;
+  align-self: center;
+}
+
+.editor-remove-icon {
+  height: 20px;
+  align-self: center;
   position: relative;
-  top: -6px;
+  top: -1px;
 }
