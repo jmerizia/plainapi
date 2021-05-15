@@ -1,6 +1,5 @@
 import sqlite3
-from typing import List, Tuple, Optional, TypedDict
-from generate import DB_NAME
+from typing import List, Tuple, Optional, Any
 from parse_sql import parse_query, parse_schema, type_hint2schema_type
 import os
 import subprocess
@@ -11,21 +10,21 @@ import openai
 from uuid import uuid4
 import sqlite3
 
-from common import perror
-
 
 load_dotenv()
-openai.api_key = os.getenv('OPENAI_KEY')
+openai.api_key = os.getenv('OPENAI_API_KEY')
+DB_NAME = 'generated/demo.sqlite3'
+CACHE_DIR = 'gpt_cache'
 
 
 def cached_gpt3(prompt: str, stop: str = '\n', use_cache: bool = True) -> str:
-    if not os.path.exists('cache'):
-        os.mkdir('cache')
+    if not os.path.exists(CACHE_DIR):
+        os.mkdir(CACHE_DIR)
 
     if use_cache:
         # Check the cache
         separator = '\n===========\n'
-        cache_files = [os.path.join('cache', p) for p in os.listdir('cache')]
+        cache_files = [os.path.join(CACHE_DIR, p) for p in os.listdir(CACHE_DIR)]
         for fn in cache_files:
             with open(fn, 'r') as f:
                 query, result = f.read().split(separator)
@@ -42,7 +41,7 @@ def cached_gpt3(prompt: str, stop: str = '\n', use_cache: bool = True) -> str:
     result = response['choices'][0]['text']
 
     # Add to the cache
-    cache_file = os.path.join('cache', str(uuid4()))
+    cache_file = os.path.join(CACHE_DIR, str(uuid4()))
     with open(cache_file, 'w') as f:
         f.write(prompt + separator + result)
 
@@ -69,7 +68,7 @@ def english2sql(english_query: str, schema_text: Optional[str] = None, use_cache
         tables = parse_schema(schema_text)
         created_tables = [t for t in tables if 'sqlite_sequence' not in t['table_name']]
         if len(created_tables) == 0:
-            perror('Error: there are no tables')
+            raise ValueError('Error: there are no tables')
         db_spec = 'The database contains '
         for table_idx, table in enumerate(created_tables):
             table_name = table['table_name']
@@ -255,7 +254,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-con = sqlite3.connect(<<<DB_NAME>>>)
+con = sqlite3.connect('<<<DB_NAME>>>')
 
     '''
 
@@ -271,6 +270,53 @@ con = sqlite3.connect(<<<DB_NAME>>>)
         code += endpoint
 
     return code
+
+
+def read_plain_txt(input_fn: str) -> Tuple[List[str], List[str]]:
+    """
+    Parses the input_fn and returns a tuple of two lists of strings,
+    holding the migrations and queries respectively.
+
+    Formally,
+    (
+        [
+            <english str>,
+            ...
+        ],
+        [
+            <english str>,
+            ...
+        ]
+    )
+
+    """
+
+    with open(input_fn, 'r') as f:
+        migrations = []
+        queries = []
+        mode = 'none'
+        for line in f:
+            stripped = line.strip()
+            if len(stripped) == 0:
+                continue
+            if stripped.lower() == '== migrations':
+                if mode != 'none':
+                    raise ValueError(f'Invalid {input_fn}: The migrations section should appear first.')
+                mode = 'migrations'
+            elif stripped.lower() == '== queries':
+                if mode != 'migrations':
+                    raise ValueError(f'Invalid {input_fn}: The queries section should appear after the migrations section.')
+                mode = 'queries'
+            elif stripped[0] == '#':
+                pass
+            else:
+                if mode == 'migrations':
+                    migrations.append(stripped)
+                elif mode == 'queries':
+                    queries.append(stripped)
+                else:
+                    pass
+        return migrations, queries
 
 
 def run_necessary_migrations(sql_migrations: List[str], english_migrations: List[str]):
@@ -291,6 +337,7 @@ def run_necessary_migrations(sql_migrations: List[str], english_migrations: List
         SELECT name FROM sqlite_master WHERE type='table' AND name = '__plainapi_migrations';
     ''')
     rows = cur.fetchall()
+    existing_migrations: List[Any] = []
     if len(rows) == 0:
         # create the table
         cur.execute('''
@@ -300,22 +347,20 @@ def run_necessary_migrations(sql_migrations: List[str], english_migrations: List
                 english_query VARCHAR(500) NOT NULL
             );
         ''')
-        existing_migrations = []
     else:
         cur.execute('''
             SELECT sql_query, english_query FROM __plainapi_migrations ORDER BY id ASC;
         ''')
-        existing_migrations = []
         for sql_query, english_query in cur.fetchall():
             existing_migrations.append({'sql': sql_query, 'english': english_query})
 
     # ensure the existing migrations are correct
     for a, b in zip(existing_migrations, english_migrations):
         if a['english'] != b:
-            perror(f'Invalid previously applied migration (it has been changed):\n  "{a["english"]}" -> "{b}"')
+            raise ValueError(f'Invalid previously applied migration (it has been changed):\n  "{a["english"]}" -> "{b}"')
 
     if len(sql_migrations) != len(english_migrations):
-        perror('Internal: There are more SQL migrations than original English migrations')
+        raise ValueError('Internal: There are more SQL migrations than original English migrations')
 
     if len(existing_migrations) < len(sql_migrations):
         print('Running migrations...')
@@ -352,7 +397,7 @@ def generate_app(input_fn: str = 'plain.txt', output_fn: str = 'api.py', use_cac
     sql_migrations = [english2sql(m, use_cache=use_cache) for m in english_migrations]
     run_necessary_migrations(sql_migrations, english_migrations)
 
-    code = generate_app_from_english_queries(english_queries)
+    code = generate_app_from_english_queries('My API', english_queries)
     with open(output_fn, 'w') as f:
         f.write(code)
 
@@ -361,5 +406,8 @@ def generate_app(input_fn: str = 'plain.txt', output_fn: str = 'api.py', use_cac
 
 
 if __name__ == '__main__':
-    Fire(generate_app)
+    with open('migrations.txt', 'r') as f:
+        english_migrations = [m.strip() for m in f.read().split('\n\n')]
+    sql_migrations = [english2sql(m) for m in english_migrations]
+    run_necessary_migrations(sql_migrations, english_migrations)
 

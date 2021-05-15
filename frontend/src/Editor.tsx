@@ -1,9 +1,10 @@
-import React, { useMemo, useCallback, useEffect } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import {
     Slate,
     Editable,
     withReact,
 } from 'slate-react'
+import { endpointsEqual, zip } from './utils';
 import {
   Transforms,
   createEditor,
@@ -19,6 +20,7 @@ import {
     EndpointElement,
 } from './types';
 import { RenderElementProps } from 'slate-react/dist/components/editable';
+import RegenIcon from './icons/sync_white_24dp.svg';
 
 
 
@@ -26,10 +28,12 @@ export interface EditorProps {
     title: string;
     endpoints: Endpoint[];
     onChange(title: string, endpoints: Endpoint[]): void;
+    onRestart(): void;
+    previewLoading: boolean;
 }
 
 export default function Editor({
-    title, endpoints, onChange
+    title, endpoints, onChange, onRestart, previewLoading
 }: EditorProps) {
     const value: Descendant[] = [
         {
@@ -51,14 +55,28 @@ export default function Editor({
     const renderElement = useCallback((props: RenderElementProps) => <Element {...props} />, []);
 
     return <div className='editor'>
+        <button
+            className='regen-button'
+            onClick={onRestart}
+        >
+            <span className='regen-button-text'>
+                Regen
+            </span>
+            <img
+                className={`regen-button-icon ${previewLoading ? 'spinning' : ''}`}
+                src={RegenIcon}
+                alt=''
+            />
+        </button>
         <Slate
             editor={editor}
             value={value}
             onChange={newValue => {
-                onChange(
-                    treeToTitle(newValue),
-                    treeToEndpoints(newValue)
-                );
+                const newTitle = treeToTitle(newValue);
+                const newEndpoints = treeToEndpoints(newValue);
+                if (title !== newTitle || zip(endpoints, newEndpoints).some(([a, b]) => !endpointsEqual(a, b))) {
+                    onChange(newTitle, newEndpoints);
+                }
             }}
         >
             <Editable
@@ -77,18 +95,7 @@ function Element({ attributes, children, element }: RenderElementProps) {
         case 'title':
             return <h2 className='editor-title' {...attributes}>{children}</h2>
         case 'endpoint':
-            return <p className='editor-endpoint' {...attributes}>
-                <span style={{ userSelect: 'none' }}>
-                    <span
-                        style={{ backgroundColor: 'lightblue', borderRadius: '3px' }}
-                        onClick={() => {
-                            alert('get');
-                        }}
-                    >GET</span>
-                    {' '}
-                </span>
-                {children}
-            </p>
+            return <p className='editor-endpoint' {...attributes}>{children}</p>
         default:
             return null;
     }

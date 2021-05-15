@@ -1,3 +1,5 @@
 temp.mp4
 temp.png
 db/plainapi.sqlite3
+generated/
+gpt_cache/

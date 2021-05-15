@@ -1,0 +1,3 @@
+create a users table containing an id, email, age, and location.
+
+add a boolean "is_admin" field to the users table

@@ -24,6 +24,7 @@ code {
   border-right: 1px solid lightgrey;
   overflow: scroll;
   padding: 15px;
+  position: relative;
 }
 
 .preview-container {
@@ -47,4 +48,58 @@ code {
 .editor-endpoint {
   margin-top: 0px;
   font-size: 20px;
+}
+
+.regen-button {
+  display: flex;
+  flex-direction: row;
+  border: none;
+  background-color: #267dff;
+  position: absolute;
+  right: 20px;
+  top: 20px;
+  color: white;
+  font-weight: bold;
+  z-index: 10;
+  padding: 4px;
+  padding-left: 14px;
+  padding-right: 14px;
+  border-radius: 30px;
+}
+
+.regen-button:hover {
+  background-color: #1a55ad;
+  cursor: pointer;
+}
+
+.regen-button:active {
+  background-color: #134085;
+}
+
+.regen-button-text {
+  flex: 1;
+  align-self: center;
+  line-height: 1.5em;
+  font-size: 20px;
+}
+
+.regen-button-icon {
+  align-self: center;
+  margin-left: 3px;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(-360deg);
+  }
+}
+
+.show-login-button {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
 }

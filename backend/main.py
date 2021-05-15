@@ -10,6 +10,7 @@ import bcrypt
 from models import RecordId, Token, User, UserPublic, API, Endpoint
 from utils import expect_env, clean_user
 import queries
+from manager import Manager
 
 
 load_dotenv()
@@ -33,6 +34,8 @@ app.add_middleware(
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=PREFIX + "/users/login")
+
+manager = Manager()
 
 def is_good_password(password: str) -> bool:
     return len(password) >= 8
@@ -150,7 +153,8 @@ async def create_api(title: str,
     if user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=401, detail='Unauthorized request')
     now = datetime.utcnow()
-    return queries.insert_api(title=title, serialized_endpoints=serialized_endpoints, user_id=user_id, created=now, updated=now)
+    api = queries.insert_api(title=title, serialized_endpoints=serialized_endpoints, user_id=user_id, created=now, updated=now)
+    return api
 
 @app.get(PREFIX + '/apis/get-by-id/', response_model=API)
 async def read_api(current_user: User = Depends(get_current_user),
@@ -175,12 +179,23 @@ async def update_api(title: Optional[str] = None,
         raise HTTPException(status_code=401, detail='Unauthorized request')
     now = datetime.utcnow()
     queries.update_api(id=api.id, title=title, serialized_endpoints=serialized_endpoints, updated=now)
+    new_api = queries.select_api_by_id(id=api.id)
+    if new_api is None:
+        raise HTTPException(status_code=401, detail='Internal Error')
 
 @app.delete(PREFIX + '/apis/delete/', response_model=None)
 async def delete_api(current_user: User = Depends(get_current_user), api: API = Depends(get_current_api)) -> None:
     if not current_user.is_admin and current_user.id != api.user_id:
         raise HTTPException(status_code=401, detail='Unauthorized request')
     queries.delete_api(id=api.id)
+
+@app.post(PREFIX + '/apis/restart', response_model=None)
+async def restart_api(api: API = Depends(get_current_api),
+                      current_user: User = Depends(get_current_user)) -> None:
+    if not current_user.is_admin and current_user.id != api.user_id:
+        raise HTTPException(status_code=401, detail='Unauthorized request')
+    manager.set_api(api)
+    manager.restart()
 
 r"""
            _          

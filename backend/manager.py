@@ -1,21 +1,78 @@
-from typing import List
-from models import Endpoint
+from typing import List, Optional, Tuple
+from models import API, Endpoint
+from subprocess import Popen, PIPE
+from dotenv import load_dotenv
+import os
+from datetime import datetime
+import time
+from utils import expect_env
+import openai
+
+from generate import generate_app_from_english_queries
 
 
-class APIManager:
+load_dotenv()
+openai.api_key = expect_env('OPENAI_API_KEY')
 
-    def __init__(self):
-        self.endpoints = []
+class Manager:
+    api: Optional[API] = None
+    proc: Optional[Popen[bytes]] = None
 
-    def set_endpoints(self, endpoints: List[Endpoint]):
-        self.endpoints = endpoints
-        self.reset()
+    def set_api(self, api: API):
+        self.api = api
 
-    def reset(self):
-        pass
+    def restart(self):
+        self.stop()
+        self.start()
 
-    def run(self):
-        pass
+    def start(self) -> None:
+        self.regenerate_code()
+        if self.proc is not None:
+            raise ValueError('Manager Error: process is already running')
+        self.proc = Popen(['uvicorn', 'generated.app:app', '--host', '0.0.0.0', '--port', '3002'], stdout=PIPE, stderr=PIPE)
+        time.sleep(2)  # TODO: fix this race condition properly
+        print('Manager: successfully started API')
 
-    def stop(self):
-        pass
+    def stop(self) -> None:
+        if self.proc is not None:
+            self.proc.kill()
+            self.proc.wait()
+            self.proc = None
+        print('Manager: successfully stopped API')
+
+    def wait(self) -> Tuple[bytes, bytes]:
+        if self.proc is None:
+            raise ValueError('Manager Error: cannot wait on process because it has not been started')
+        stdout, stderr = self.proc.communicate()
+        return stdout, stderr
+
+    def regenerate_code(self):
+        if self.api is None:
+            raise ValueError('Manager Error: api has not been set')
+        if not os.path.exists('generated'):
+            os.mkdir('generated')
+        english_queries = [e.value for e in self.api.endpoints]
+        code = generate_app_from_english_queries(self.api.title, english_queries)
+        with open('generated/app.py', 'w') as f:
+            f.write(code)
+
+    def clear_api(self):
+        self.api = None
+
+
+if __name__ == '__main__':
+    m = Manager()
+    a = API(
+        id=1,
+        title='My API',
+        endpoints=[],
+        user_id=1,
+        created=datetime.utcnow(),
+        updated=datetime.utcnow(),
+    )
+    m.set_api(a)
+    m.start()
+    time.sleep(2)
+    m.stop()
+    out, err = m.wait()
+    print(out, err)

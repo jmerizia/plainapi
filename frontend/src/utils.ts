@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Configuration, DefaultApi } from './generated';
+import { Endpoint } from './types';
 
 
 export async function wait(ms: number): Promise<void> {
@@ -98,3 +99,11 @@ export function moveElementFromTo<T>(ar: T[], s: number, t: number): T[] {
 export function logError(err: any) {
     console.error(err);
 }
+
+export function endpointsEqual(a: Endpoint, b: Endpoint): boolean {
+    if (a.value !== b.value) return false;
+    if (a.method !== b.method) return false;
+    return true;
+}
+
+export function zip<T, U>(a: T[], b: U[]): [T, U][] { return a.map((k, i) => [k, b[i]]); }

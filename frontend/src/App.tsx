@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
     logError,
     useBackend,
@@ -13,9 +13,13 @@ import debounce from 'debounce';
 
 
 export default function App() {
-    const { backend, currentUserId, login, logout } = useBackend();
+    const { backend, currentUserId } = useBackend();
     const [api, setApi] = useState<API | null>(null);
     const [numApis, setNumApis] = useState<number | null>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const iframeRef = useRef<HTMLIFrameElement>(null);
+    const [showLoginStuff, setShowLoginStuff] = useState(false);
+    const iframeSrc = 'http://localhost:3002/docs';
 
     const debouncedUpdateApi = debounce((payload: { apiId: number, title?: string, endpoints?: Endpoint[] }) => {
         backend.updateApiApiV0ApisUpdatePatch({
@@ -29,6 +33,15 @@ export default function App() {
         if (api) {
             setApi({ ...api, title, endpoints });
             debouncedUpdateApi({ apiId: api.id, title, endpoints });
+        }
+    };
+
+    const handleRestart = async () => {
+        if (api && iframeRef.current) {
+            setPreviewLoading(true);
+            await backend.restartApiApiV0ApisRestartPost({ apiId: api.id });
+            iframeRef.current.src = iframeSrc;
+            setPreviewLoading(false);
         }
     };
 
@@ -54,19 +67,35 @@ export default function App() {
                         title={api.title}
                         endpoints={api.endpoints}
                         onChange={handleChange}
+                        onRestart={handleRestart}
+                        previewLoading={previewLoading}
                     />
                 }
-                <LoginBox
-                    numApis={numApis}
-                    setApi={setApi}
-                />
+                { showLoginStuff &&
+                    <LoginBox
+                        numApis={numApis}
+                        setApi={setApi}
+                    />
+                }
             </div>
-            <div className="preview-container">
+            <div
+                className="preview-container"
+                style={{
+                    opacity: previewLoading ? 0.5 : undefined,
+                    userSelect: previewLoading ? 'none' : undefined,
+                }}
+            >
                 <iframe
+                    title='preview'
+                    ref={iframeRef}
                     className='preview-iframe'
-                    src='http://localhost:3001/api/v0/docs'
+                    src={iframeSrc}
                 />
             </div>
+            <div
+                className='show-login-button'
+                onClick={() => setShowLoginStuff(!showLoginStuff)}
+            >v0.1.0</div>
         </div>
     );
 }
