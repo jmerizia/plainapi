@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Configuration, DefaultApi, API } from './generated';
+import { Configuration, DefaultApi } from './generated';
 
 
 export async function wait(ms: number): Promise<void> {

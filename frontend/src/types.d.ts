@@ -13,7 +13,6 @@ declare module "*.svg";
 
 
 export type Endpoint = {
-    id: number;
     method: string;
     value: string;
 };
@@ -25,10 +24,6 @@ export type AppState = {
 };
 
 
-export type TitleElement = { type: 'title'; children: Descendant[] };
-export type ParagraphElement = { type: 'paragraph'; children: Descendant[] };
-export type CustomElement = TitleElement | ParagraphElement;
-export type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
 export type CustomText = {
     bold?: boolean;
     italic?: boolean;
@@ -38,11 +33,16 @@ export type CustomText = {
 export type EmptyText = {
     text: string;
 }
+export type TextElement = CustomText | EmptyText;
+export type TitleElement = { type: 'title'; children: TextElement[] };
+export type EndpointElement = { type: 'endpoint'; children: TextElement[] };
+export type CustomElement = TitleElement | EndpointElement;
+export type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
 
 declare module 'slate' {
     interface CustomTypes {
         Editor: CustomEditor;
         Element: CustomElement;
-        Text: CustomText | EmptyText;
+        Text: TextElement;
     }
 }

@@ -24,7 +24,6 @@ class UserPublic(BaseModel):
     joined: datetime
 
 class Endpoint(BaseModel):
-    id: RecordId
     method: str #  Literal['GET', 'POST', 'PATCH', 'DELETE']
     value: str
 
