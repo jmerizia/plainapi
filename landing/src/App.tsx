@@ -45,9 +45,7 @@ function IndexPage() {
       <Col style={{ display: 'flex', justifyContent: 'center', }}>
         <video
           src='/demo-video.mov'
-          autoPlay
-          controls
-          // alt='screenshot showcasing how the application allows converting English to API endpoints'
+          controls={true}
           className='App-demo-video'
         />
       </Col>
@@ -58,8 +56,8 @@ function IndexPage() {
     <Row>
       <Col xs={12} md={6}>
         <img
-          src='/animation1.gif'
-          // alt='screenshot showcasing how the application allows converting English to API endpoints'
+          src='/animation2.gif'
+          alt='demo of the application converting English to code'
           className='App-dynamic-image'
         />
       </Col>
@@ -115,7 +113,7 @@ function IndexPage() {
     <Row>
       <Col>
         <h3 className='center-text'>
-          We release this fall.
+          We launch this fall.
         </h3>
       </Col>
     </Row>
@@ -137,8 +135,9 @@ function WaitlistPage() {
       <Col style={{ display: 'flex', justifyContent: 'center', }}>
         <iframe
           src="https://docs.google.com/forms/d/e/1FAIpQLScRksxuXbtJg3KzV-oQDXGF-LEgtgU1wfLnk-VRAFQe3nrmVw/viewform?embedded=true"
+          title='waitlist-form'
           width="640"
-          height="1050"
+          height="1080"
           frameBorder={0}
           marginHeight={0}
           marginWidth={0}
