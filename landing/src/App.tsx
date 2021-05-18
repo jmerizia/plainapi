@@ -138,7 +138,7 @@ function WaitlistPage() {
         <iframe
           src="https://docs.google.com/forms/d/e/1FAIpQLScRksxuXbtJg3KzV-oQDXGF-LEgtgU1wfLnk-VRAFQe3nrmVw/viewform?embedded=true"
           width="640"
-          height="850"
+          height="1050"
           frameBorder={0}
           marginHeight={0}
           marginWidth={0}
