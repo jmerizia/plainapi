@@ -43,9 +43,11 @@ function IndexPage() {
     </Row>
     <Row>
       <Col style={{ display: 'flex', justifyContent: 'center', }}>
-        <img
-          src='/screenshot1.png'
-          alt='screenshot showcasing how the application allows converting English to API endpoints'
+        <video
+          src='/demo-video.mov'
+          autoPlay
+          controls
+          // alt='screenshot showcasing how the application allows converting English to API endpoints'
           className='App-demo-video'
         />
       </Col>
@@ -56,8 +58,8 @@ function IndexPage() {
     <Row>
       <Col xs={12} md={6}>
         <img
-          src='/screenshot2.png'
-          alt='screenshot showcasing how the application allows converting English to API endpoints'
+          src='/animation1.gif'
+          // alt='screenshot showcasing how the application allows converting English to API endpoints'
           className='App-dynamic-image'
         />
       </Col>
@@ -66,8 +68,8 @@ function IndexPage() {
           Writing code is hard—explaining it is easy.
         </h2>
         <p>
-          PlainAPI converts natural language into functions, SQL statements,
-          and classes using GPT-3.
+          PlainAPI understands what you write and generates
+          functions, classes, and SQL statements for you.
         </p>
       </Col>
     </Row>
@@ -80,16 +82,15 @@ function IndexPage() {
           Type-Check your English
         </h2>
         <p>
-          PlainAPI understands the types of things you write,
-          and generates an OpenAPI specification that you can use in
-          client-side no-code platforms.
+          PlainAPI type-checks everything you write so you
+          can work quickly and confidently.
         </p>
       </Col>
       <Col xs={{ span: 12, order: 1 }} md={{ span: 6, order: 2 }}>
         <img
-          src='/screenshot3.png'
+          src='/screenshot-types.png'
           alt='screenshot showcasing how the application allows converting English to API endpoints'
-          className='App-dynamic-image'
+          className='App-dynamic-image padding-20'
         />
       </Col>
     </Row>
@@ -114,7 +115,7 @@ function IndexPage() {
     <Row>
       <Col>
         <h3 className='center-text'>
-          We release this summer.
+          We release this fall.
         </h3>
       </Col>
     </Row>

@@ -14,7 +14,7 @@ code {
 }
 
 p {
-  font-size: 1.2em;
+  font-size: 1em;
 }
 
 .center-text {
@@ -116,4 +116,11 @@ p {
   align-self: flex-start;
   width: 100%;
   max-width: 600px;
+  /* padding: 10px; */
+  border: thin solid lightgrey;
+  border-radius: 10px;
+}
+
+.padding-20 {
+  padding: 20px;
 }
