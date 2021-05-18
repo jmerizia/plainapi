@@ -56,7 +56,7 @@ function IndexPage() {
     <Row>
       <Col xs={12} md={6}>
         <img
-          src='/animation2.gif'
+          src='/animation1.gif'
           alt='demo of the application converting English to code'
           className='App-dynamic-image'
         />
