@@ -107,3 +107,13 @@ export function endpointsEqual(a: Endpoint, b: Endpoint): boolean {
 }
 
 export function zip<T, U>(a: T[], b: U[]): [T, U][] { return a.map((k, i) => [k, b[i]]); }
+
+export function listsEqual<T>(a: T[], b: T[], elementEqualityFunction: (ea: T, eb: T) => boolean): boolean {
+    if (a.length !== b.length) return false;
+    for (const [ea, eb] of zip(a, b)) {
+        if (!elementEqualityFunction(ea, eb)) {
+            return false;
+        }
+    }
+    return true;
+}

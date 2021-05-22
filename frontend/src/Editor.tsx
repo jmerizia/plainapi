@@ -4,7 +4,7 @@ import {
     Editable,
     withReact,
 } from 'slate-react'
-import { endpointsEqual, zip } from './utils';
+import { endpointsEqual, listsEqual } from './utils';
 import {
   Transforms,
   createEditor,
@@ -74,7 +74,7 @@ export default function Editor({
             onChange={newValue => {
                 const newTitle = treeToTitle(newValue);
                 const newEndpoints = treeToEndpoints(newValue);
-                if (title !== newTitle || zip(endpoints, newEndpoints).some(([a, b]) => !endpointsEqual(a, b))) {
+                if (title !== newTitle || !listsEqual(endpoints, newEndpoints, endpointsEqual)) {
                     onChange(newTitle, newEndpoints);
                 }
             }}
@@ -84,6 +84,11 @@ export default function Editor({
                 placeholder="Enter a title…"
                 spellCheck={false}
                 autoFocus
+                onKeyDown={ev => {
+                    if ((ev.ctrlKey || ev.metaKey) && ev.code === 'Enter') {
+                        onRestart();
+                    }
+                }}
             />
         </Slate>
     </div>;
@@ -95,7 +100,9 @@ function Element({ attributes, children, element }: RenderElementProps) {
         case 'title':
             return <h2 className='editor-title' {...attributes}>{children}</h2>
         case 'endpoint':
-            return <p className='editor-endpoint' {...attributes}>{children}</p>
+            return <p className='editor-endpoint' {...attributes}>
+                {children}
+            </p>
         default:
             return null;
     }

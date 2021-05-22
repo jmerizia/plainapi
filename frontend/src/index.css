@@ -29,7 +29,7 @@ code {
 
 .preview-container {
   overflow: scroll;
-  flex: 1;
+  flex: 1.5;
 }
 
 .preview-iframe {
