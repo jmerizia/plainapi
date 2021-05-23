@@ -2,7 +2,7 @@
 set -e
 
 # Check python type hints
-mypy .
+mypy . --exclude ./generated
 
 # Emit openapi specification from FastAPI
 python ./emit_openapi.py > openapi.json

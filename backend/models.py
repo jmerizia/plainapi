@@ -24,7 +24,8 @@ class UserPublic(BaseModel):
     joined: datetime
 
 class Endpoint(BaseModel):
-    method: str #  Literal['GET', 'POST', 'PATCH', 'DELETE']
+    method: str
+    url: str
     value: str
 
 class API(BaseModel):

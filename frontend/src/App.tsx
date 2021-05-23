@@ -29,7 +29,7 @@ export default function App() {
         });
     }, 300);
 
-    const handleChange = async (title: string, endpoints: Endpoint[]) => {
+    const handleChange = async ({ title, endpoints }: { title: string, endpoints: Endpoint[] }) => {
         if (api) {
             setApi({ ...api, title, endpoints });
             debouncedUpdateApi({ apiId: api.id, title, endpoints });

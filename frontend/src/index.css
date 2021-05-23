@@ -45,11 +45,6 @@ code {
   font-size: 30px;
 }
 
-.editor-endpoint {
-  margin-top: 0px;
-  font-size: 20px;
-}
-
 .regen-button {
   display: flex;
   flex-direction: row;
@@ -102,4 +97,59 @@ code {
   position: absolute;
   left: 5px;
   bottom: 5px;
+}
+
+
+/* Editor */
+
+.input-base {
+  font-size: 17px;
+  font-family: inherit;
+  border: none;
+  outline: none;
+  padding: 5px;
+  background-color: #eee;
+  height: 19px;
+}
+
+.rendered-base {
+  font-size: 17px;
+  font-family: inherit;
+  padding: 5px;
+  height: 19px;
+}
+
+.rendered-base:hover {
+  background-color: #efefef;
+}
+
+.input-method {
+  width: 80px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.rendered-method {
+  width: 80px;
+  border-radius: 5px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.input-url {
+  width: 100%;
+}
+
+.rendered-url {
+  width: 100%;
+  font-style: italic;
+  color: grey;
+}
+
+.input-value {
+  width: 100%;
+}
+
+.rendered-value {
+  width: 100%;
 }

@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 import openai
 from uuid import uuid4
 import sqlite3
+import random
+
+from models import Endpoint
 
 
 load_dotenv()
@@ -39,6 +42,7 @@ def cached_gpt3(prompt: str, stop: str = '\n', use_cache: bool = True) -> str:
         stop=stop,
     )
     result = response['choices'][0]['text']
+    print('cache miss, using GPT3')
 
     # Add to the cache
     cache_file = os.path.join(CACHE_DIR, str(uuid4()))
@@ -159,15 +163,19 @@ Q: '''
     prompt += english_query.strip()
     prompt += '\nA:'
 
-    result = cached_gpt3(prompt, use_cache=use_cache)
+    def valid_char(c: str) -> bool:
+        return c.isalnum() or c == ' ' or c == '_'
 
+    result = cached_gpt3(prompt, use_cache=use_cache)
+    result = ''.join(c for c in result if valid_char(c))
+    while len(result) > 0 and result[0].isnumeric():
+        result = result[1:]
+    if len(result) == 0:
+        result = 'untitled'
     return '_'.join(result.strip().lower().split(' '))
 
 
-def generate_endpoint(name: str,
-                      sql_query: str,
-                      original_english_query: str,
-                      schema_text: str) -> str:
+def generate_endpoint(endpoint: Endpoint, schema_text: str, use_cache=True) -> str:
     """
     Generate a FastAPI endpoint from an SQL query.
 
@@ -176,27 +184,28 @@ def generate_endpoint(name: str,
 
     """
 
+    sql_query = english2sql(endpoint.value, schema_text, use_cache=use_cache)
+    func_name = english2summary_name(endpoint.value)
     inputs, outputs = parse_query(sql_query, schema_text)
 
     template = '''
 <<<RESPONSE_CLASS>>>
 
-@app.post("/<<<NAME>>>", response_model=<<<RESPONSE_MODEL>>>)
-async def <<<NAME>>>(<<<PARAMS>>>) -> <<<RESPONSE_MODEL>>>:
+@app.<<<METHOD>>>("<<<URL>>>", response_model=<<<RESPONSE_MODEL>>>)
+async def <<<FUNC_NAME>>>(<<<PARAMS>>>) -> <<<RESPONSE_MODEL>>>:
     \'\'\'
     <<<ENGLISH_QUERY>>>
-    ---
-    SQL: <<<SQL_QUERY>>>
     \'\'\'
     cur = con.cursor()
     cur.execute('<<<SQL_QUERY>>>', <<<BINDINGS>>>)
-    res = []
-    output_names = <<<OUTPUT_NAME_LIST>>>
+    res: List[Any] = []
+    output_names: List[str] = <<<OUTPUT_NAME_LIST>>>
     for row in cur.fetchall():
         row_dict = dict()
         for k, v in zip(output_names, row):
             row_dict[k] = v
         res.append(row_dict)
+    con.commit()
     <<<RETURN_STATEMENT>>>
     '''
 
@@ -208,20 +217,22 @@ async def <<<NAME>>>(<<<PARAMS>>>) -> <<<RESPONSE_MODEL>>>:
     output_name_list = '[' + ', '.join([f'\'{c["name"]}\'' for c in outputs]) + ']'
 
     if len(outputs) > 0:
-        response_model = f'List[OutputType_{name}]'
+        response_model = f'List[OutputType_{func_name}]'
         return_statement = 'return res'
         response_class = \
-            f'class OutputType_{name}(BaseModel):\n' + \
+            f'class OutputType_{func_name}(BaseModel):\n' + \
             '    ' + '\n    '.join(f'{c["name"]}: {c["type"]}' for c in outputs)
     else:
         response_model = 'None'
         return_statement = 'return None'
         response_class = ''
 
-    template = template.replace('<<<NAME>>>', name)
+    template = template.replace('<<<FUNC_NAME>>>', func_name)
+    template = template.replace('<<<URL>>>', endpoint.url)
+    template = template.replace('<<<METHOD>>>', endpoint.method.lower())
     template = template.replace('<<<SQL_QUERY>>>', sql_query)
     template = template.replace('<<<PARAMS>>>', params)
-    template = template.replace('<<<ENGLISH_QUERY>>>', original_english_query)
+    template = template.replace('<<<ENGLISH_QUERY>>>', endpoint.value)
     template = template.replace('<<<BINDINGS>>>', bindings)
     template = template.replace('<<<OUTPUT_NAME_LIST>>>', output_name_list)
     template = template.replace('<<<RESPONSE_MODEL>>>', response_model)
@@ -230,10 +241,10 @@ async def <<<NAME>>>(<<<PARAMS>>>) -> <<<RESPONSE_MODEL>>>:
     return template
 
 
-def generate_app_from_english_queries(title: str, english_queries: List[str], use_cache: bool = True):
+def generate_app(title: str, endpoints: List[Endpoint], use_cache: bool = True):
 
     code = '''
-from typing import List, Union, Literal, Optional, Dict
+from typing import List, Union, Literal, Optional, Dict, Any
 from fastapi import FastAPI, Path, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -259,15 +270,13 @@ con = sqlite3.connect('<<<DB_NAME>>>')
     '''
 
     schema_text = get_db_schema_text()
-    query_names = [english2summary_name(q, use_cache=use_cache) for q in english_queries]
-    sql_queries = [english2sql(q, schema_text, use_cache=use_cache) for q in english_queries]
 
     code = code.replace('<<<TITLE>>>', title)
     code = code.replace('<<<DB_NAME>>>', DB_NAME)
 
-    for name, query, english_query in zip(query_names, sql_queries, english_queries):
-        endpoint = generate_endpoint(name, query, english_query, schema_text)
-        code += endpoint
+    for endpoint in endpoints:
+        endpoint_code = generate_endpoint(endpoint, schema_text)
+        code += endpoint_code
 
     return code
 
@@ -380,34 +389,34 @@ def run_necessary_migrations(sql_migrations: List[str], english_migrations: List
     con.commit()
 
 
-def generate_app(input_fn: str = 'plain.txt', output_fn: str = 'api.py', use_cache: bool = True):
-    """
-    Given a file of English sentences, output a file containing a FastAPI web server.
+# def generate_app_old(input_fn: str = 'plain.txt', output_fn: str = 'api.py', use_cache: bool = True):
+#     """
+#     Given a file of English sentences, output a file containing a FastAPI web server.
 
-    """
+#     """
 
-    english_migrations, english_queries = read_plain_txt(input_fn)
-    print('Migrations:')
-    for english_migration in english_migrations:
-        print(f' -> {english_migration}')
-    print('Queries:')
-    for english_query in english_queries:
-        print(f' -> {english_query}')
+#     english_migrations, english_queries = read_plain_txt(input_fn)
+#     print('Migrations:')
+#     for english_migration in english_migrations:
+#         print(f' -> {english_migration}')
+#     print('Queries:')
+#     for english_query in english_queries:
+#         print(f' -> {english_query}')
 
-    sql_migrations = [english2sql(m, use_cache=use_cache) for m in english_migrations]
-    run_necessary_migrations(sql_migrations, english_migrations)
+#     sql_migrations = [english2sql(m, use_cache=use_cache) for m in english_migrations]
+#     run_necessary_migrations(sql_migrations, english_migrations)
 
-    code = generate_app_from_english_queries('My API', english_queries)
-    with open(output_fn, 'w') as f:
-        f.write(code)
+#     code = generate_app_from_english_queries('My API', english_queries)
+#     with open(output_fn, 'w') as f:
+#         f.write(code)
 
-    command_to_run = 'uvicorn ' + output_fn.split('.')[0] + ':app'
-    print(f'Successfully created API! Try running `{command_to_run}`')
+#     command_to_run = 'uvicorn ' + output_fn.split('.')[0] + ':app'
+#     print(f'Successfully created API! Try running `{command_to_run}`')
 
 
-if __name__ == '__main__':
-    with open('migrations.txt', 'r') as f:
-        english_migrations = [m.strip() for m in f.read().split('\n\n')]
-    sql_migrations = [english2sql(m) for m in english_migrations]
-    run_necessary_migrations(sql_migrations, english_migrations)
+# if __name__ == '__main__':
+#     with open('migrations.txt', 'r') as f:
+#         english_migrations = [m.strip() for m in f.read().split('\n\n')]
+#     sql_migrations = [english2sql(m) for m in english_migrations]
+#     run_necessary_migrations(sql_migrations, english_migrations)
 

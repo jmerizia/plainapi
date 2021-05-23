@@ -1,10 +1,5 @@
-import React, { useMemo, useCallback } from 'react';
-import {
-    Slate,
-    Editable,
-    withReact,
-} from 'slate-react'
-import { endpointsEqual, listsEqual } from './utils';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { endpointsEqual, listsEqual, updateElementAt } from './utils';
 import {
   Transforms,
   createEditor,
@@ -21,13 +16,16 @@ import {
 } from './types';
 import { RenderElementProps } from 'slate-react/dist/components/editable';
 import RegenIcon from './icons/sync_white_24dp.svg';
-
+import { EndOfLineState } from 'typescript';
+import getCaretCoordinates from 'textarea-caret';
+import { OpenDirOptions } from 'fs';
+import { listenerCount } from 'events';
 
 
 export interface EditorProps {
     title: string;
     endpoints: Endpoint[];
-    onChange(title: string, endpoints: Endpoint[]): void;
+    onChange(payload: { title: string, endpoints: Endpoint[] }): void;
     onRestart(): void;
     previewLoading: boolean;
 }
@@ -35,24 +33,17 @@ export interface EditorProps {
 export default function Editor({
     title, endpoints, onChange, onRestart, previewLoading
 }: EditorProps) {
-    const value: Descendant[] = [
-        {
-            type: 'title',
-            children: [{ text: title }],
-        },
-    ];
-    endpoints.forEach(endpoint => {
-        value.push({
-            type: 'endpoint',
-            children: [{ text: endpoint.value }]
-        });
-    });
 
-    const editor = useMemo(
-        () => withLayout(withHistory(withReact(createEditor()))),
-        []
-    );
-    const renderElement = useCallback((props: RenderElementProps) => <Element {...props} />, []);
+    useEffect(() => {
+        if (endpoints.length === 0) {
+            const newEndpoint: Endpoint = {
+                method: '',
+                url: '',
+                value: '',
+            };
+            onChange({ title, endpoints: [newEndpoint] });
+        }
+    }, []);
 
     return <div className='editor'>
         <button
@@ -68,99 +59,245 @@ export default function Editor({
                 alt=''
             />
         </button>
-        <Slate
-            editor={editor}
-            value={value}
-            onChange={newValue => {
-                const newTitle = treeToTitle(newValue);
-                const newEndpoints = treeToEndpoints(newValue);
-                if (title !== newTitle || !listsEqual(endpoints, newEndpoints, endpointsEqual)) {
-                    onChange(newTitle, newEndpoints);
-                }
+        <input
+            className='input-base'
+            value={title}
+            onChange={ev => onChange({ title: ev.target.value, endpoints })}
+        />
+        {
+            endpoints.map((endpoint, idx) => (
+                <EndpointEditor
+                    endpoint={endpoint}
+                    onChange={endpoint => onChange({
+                        endpoints: updateElementAt(endpoints, endpoint, idx),
+                        title,
+                    })}
+                    onRegen={onRestart}
+                />
+            ))
+        }
+        <button
+            onClick={ev => {
+                const newEndpoint = {
+                    method: '',
+                    url: '/',
+                    value: '',
+                };
+                onChange({ title, endpoints: [...endpoints, newEndpoint] });
             }}
         >
-            <Editable
-                renderElement={renderElement}
-                placeholder="Enter a title…"
-                spellCheck={false}
-                autoFocus
-                onKeyDown={ev => {
-                    if ((ev.ctrlKey || ev.metaKey) && ev.code === 'Enter') {
-                        onRestart();
-                    }
-                }}
-            />
-        </Slate>
+            +
+        </button>
     </div>;
 }
 
 
-function Element({ attributes, children, element }: RenderElementProps) {
-    switch (element.type) {
-        case 'title':
-            return <h2 className='editor-title' {...attributes}>{children}</h2>
-        case 'endpoint':
-            return <p className='editor-endpoint' {...attributes}>
-                {children}
-            </p>
+interface EndpointEditorProps {
+    endpoint: Endpoint;
+    onChange(endpoint: Endpoint): void;
+    onRegen(): void;
+}
+
+function EndpointEditor({ endpoint, onChange, onRegen }: EndpointEditorProps) {
+
+    const dispatcher = useMemo(() => new FocusDispatcher<'method' | 'url' | 'value'>(), []);
+
+    return <div>
+        <div style={{ display: 'flex', alignContent: 'start' }}>
+            <div style={{ padding: '5px' }}>
+                <Field
+                    value={endpoint.method}
+                    onChange={method => onChange({ ...endpoint, method })}
+                    onPrevField={() => {}}
+                    onNextField={() => dispatcher.focus('url')}
+                    renderedStyle={getMethodStyle(endpoint.method)}
+                    inputClassName='input-method'
+                    renderedClassName='rendered-method'
+                    dispatcher={dispatcher}
+                    dispatcherType={'method'}
+                    onRegen={onRegen}
+                />
+            </div>
+            <div style={{ flex: 1, padding: '5px' }}>
+                <Field
+                    value={endpoint.url}
+                    onChange={url => onChange({ ...endpoint, url })}
+                    onPrevField={() => dispatcher.focus('method')}
+                    onNextField={() => dispatcher.focus('value') }
+                    inputClassName='input-url'
+                    renderedClassName='rendered-url'
+                    dispatcher={dispatcher}
+                    dispatcherType={'url'}
+                    onRegen={onRegen}
+                />
+            </div>
+        </div>
+        <div style={{ display: 'flex', alignContent: 'start' }}>
+            <div style={{ flex: 1, padding: '5px' }}>
+                <Field
+                    value={endpoint.value}
+                    onChange={value => onChange({ ...endpoint, value })}
+                    onPrevField={() => dispatcher.focus('url')}
+                    onNextField={() => {}}
+                    inputClassName='input-value'
+                    renderedClassName='rendered-value'
+                    dispatcher={dispatcher}
+                    dispatcherType={'value'}
+                    onRegen={onRegen}
+                />
+            </div>
+        </div>
+    </div>;
+}
+
+
+function getMethodStyle(method: string): { backgroundColor?: string, color: string } {
+    switch (method) {
+        case 'POST':
+            return { backgroundColor: 'green', color: 'white' };
+        case 'GET':
+            return { backgroundColor: 'blue', color: 'white' };
+        case 'PUT':
+            return { backgroundColor: 'orange', color: 'white' };
+        case 'PATCH':
+            return { backgroundColor: 'orange', color: 'white' };
+        case 'DELETE':
+            return { backgroundColor: 'red', color: 'white' };
         default:
-            return null;
+            return { color: 'red' };
     }
 }
 
-function treeToTitle(tree: Descendant[]): string {
-    const child = tree[0] as TitleElement;
-    const textElem = child.children[0];
-    return textElem.text;
+
+interface FieldProps<T> {
+    value: string;
+    onChange(value: string): void;
+    onPrevField(): void;
+    onNextField(): void;
+    onRegen(): void;
+    inputStyle?: React.CSSProperties;
+    renderedStyle?: React.CSSProperties;
+    inputClassName?: string;
+    renderedClassName?: string;
+    dispatcher?: FocusDispatcher<T>;
+    dispatcherType?: T;
 }
 
-function treeToEndpoints(tree: Descendant[]): Endpoint[] {
-    const endpoints: Endpoint[] = [];
-    tree.forEach((child, idx) => {
-        if (idx === 0) return;
-        const childCasted = child as EndpointElement;
-        endpoints.push({
-            method: 'GET',
-            value: childCasted.children[0].text,
-        });
-    });
-    return endpoints;
-}
+function Field<T>({
+    value,
+    onChange,
+    onPrevField,
+    onNextField,
+    onRegen,
+    inputStyle,
+    renderedStyle,
+    inputClassName,
+    renderedClassName,
+    dispatcher,
+    dispatcherType,
+}: FieldProps<T>) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [editing, setEditing] = useState(false)
+    const [lastClickLeft, setLastClickLeft] = useState(0);
 
+    useEffect(() => {
+        if (dispatcher && dispatcherType) {
+            dispatcher.listen(dispatcherType, () => {
+                setEditing(true);
+            });
+        }
+    }, [dispatcher, dispatcherType]);
 
-function withLayout (editor: CustomEditor) {
-    const { normalizeNode } = editor;
-
-    editor.normalizeNode = ([node, path]) => {
-        if (path.length === 0) {
-            if (editor.children.length < 1) {
-                const title: TitleElement = {
-                    type: 'title',
-                    children: [{ text: 'Untitled' }],
-                };
-                Transforms.insertNodes(editor, title, { at: path.concat(0) });
-            }
-
-            if (editor.children.length < 2) {
-                const paragraph: EndpointElement = {
-                    type: 'endpoint',
-                    children: [{ text: '' }],
-                };
-                Transforms.insertNodes(editor, paragraph, { at: path.concat(1) });
-            }
-
-            for (const [child, childPath] of Node.children(editor, path)) {
-                const type = childPath[0] === 0 ? 'title' : 'endpoint';
-        
-                if (SlateElement.isElement(child) && child.type !== type) {
-                    const newProperties: Partial<SlateElement> = { type };
-                    Transforms.setNodes(editor, newProperties, { at: childPath });
-                }
+    useEffect(() => {
+        if (inputRef.current) {
+            if (editing) {
+                inputRef.current.focus();
             }
         }
+    }, [inputRef, editing]);
 
-        return normalizeNode([node, path]);
+    useEffect(() => {
+        if (inputRef.current && editing) {
+            let newPos = 0;
+            let prevLeft = 0;
+            let curLeft = getCaretCoordinates(inputRef.current, newPos).left;
+            while (newPos < inputRef.current.value.length && curLeft < lastClickLeft) {
+                newPos++;
+                const caret = getCaretCoordinates(inputRef.current, newPos);
+                prevLeft = curLeft;
+                curLeft = caret.left;
+            }
+            if (Math.abs(prevLeft - lastClickLeft) < Math.abs(curLeft - lastClickLeft)) {
+                newPos--;
+            }
+            inputRef.current.selectionStart = newPos;
+            inputRef.current.selectionEnd = newPos;
+        }
+    }, [inputRef, editing, lastClickLeft]);
+
+    return editing ?
+        <input
+            className={'input-base ' + (inputClassName || '')}
+            ref={inputRef}
+            value={value}
+            onChange={ev => onChange(ev.target.value)}
+            onBlur={ev => {
+                ev.preventDefault();
+                setEditing(false);
+            }}
+            onKeyDown={ev => {
+                if (ev.key === 'Enter') {
+                    if (inputRef.current) {
+                        inputRef.current.blur();
+                    }
+                }
+                if (ev.key === 'Tab') {
+                    ev.preventDefault();
+                    if (ev.shiftKey) {
+                        onPrevField();
+                    } else {
+                        onNextField();
+                    }
+                }
+                if (ev.key === 'Enter') {
+                    if (ev.metaKey || ev.ctrlKey) {
+                        ev.preventDefault();
+                        onRegen();
+                    }
+                }
+            }}
+            style={inputStyle}
+        />
+    :
+        <div
+            className={'rendered-base ' + (renderedClassName || '')}
+            onClick={ev => {
+                ev.preventDefault();
+                setEditing(true);
+                const rect = (ev.target as HTMLDivElement).getBoundingClientRect();
+                setLastClickLeft(ev.clientX - rect.left);
+            }}
+            style={renderedStyle}
+        >
+            {value}
+        </div>;
+}
+
+
+class FocusDispatcher<T> {
+    private callbacks: Map<T, () => void>;
+    constructor() {
+        this.callbacks = new Map();
     }
 
-    return editor;
+    public listen(type: T, onFocus: () => void) {
+        this.callbacks.set(type, onFocus);
+    }
+
+    public focus(type: T) {
+        const f = this.callbacks.get(type);
+        if (f) {
+            f();
+        }
+    }
 }

@@ -237,6 +237,7 @@ def parse_query(query_text: str, schema_text: str) -> Tuple[List[Dict[str, str]]
                 else:
                     chosen_columns.append(schema_column[0])
         # Now, parse inputs (VERY rudimentary)
+        tok, idx = consume_token(tokens, idx)
         num_inputs = query_text.count('?')
         # TODO: we should probably at least get the names of the inputs...
         input_types = [{'name': f'in{i}', 'type': 'str'} for i in range(1, num_inputs+1)]

@@ -10,7 +10,7 @@ fire==0.4.0
 h11==0.12.0
 Mako==1.1.4
 MarkupSafe==1.1.1
-mypy==0.800
+mypy==0.812
 mypy-extensions==0.4.3
 openai==0.6.3
 Pillow==8.2.0

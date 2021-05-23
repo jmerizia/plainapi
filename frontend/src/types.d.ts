@@ -14,6 +14,7 @@ declare module "*.svg";
 
 export type Endpoint = {
     method: string;
+    url: string;
     value: string;
 };
 

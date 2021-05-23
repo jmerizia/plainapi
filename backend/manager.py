@@ -8,7 +8,7 @@ import time
 from utils import expect_env
 import openai
 
-from generate import generate_app_from_english_queries
+from generate import generate_app
 
 
 load_dotenv()
@@ -51,8 +51,7 @@ class Manager:
             raise ValueError('Manager Error: api has not been set')
         if not os.path.exists('generated'):
             os.mkdir('generated')
-        english_queries = [e.value for e in self.api.endpoints]
-        code = generate_app_from_english_queries(self.api.title, english_queries)
+        code = generate_app(self.api.title, self.api.endpoints)
         with open('generated/app.py', 'w') as f:
             f.write(code)
 
