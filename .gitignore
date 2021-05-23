@@ -12,3 +12,6 @@ frontend/.next/
 frontend/src/generated/
 __pycache__/
 .mypy_cache/
+
+.DS_Store
+.vscode/
