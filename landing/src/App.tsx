@@ -32,6 +32,8 @@ function App() {
 function IndexPage() {
   return <Container style={{ maxWidth: '850px' }} fluid="md">
     <Header />
+
+    {/* header */}
     <Row>
       <div className='v-spacer' />
       <Col>
@@ -41,6 +43,8 @@ function IndexPage() {
       </Col>
       <div className='v-spacer' />
     </Row>
+
+    {/* demo */}
     <Row>
       <Col style={{ display: 'flex', justifyContent: 'center', }}>
         <video
@@ -50,6 +54,8 @@ function IndexPage() {
         />
       </Col>
     </Row>
+
+    {/* row 1 */}
     <Row>
       <div className='v-spacer' />
     </Row>
@@ -71,6 +77,8 @@ function IndexPage() {
         </p>
       </Col>
     </Row>
+
+    {/* row 2 */}
     <Row>
       <div className='v-spacer' />
     </Row>
@@ -92,6 +100,8 @@ function IndexPage() {
         />
       </Col>
     </Row>
+
+    {/* footer */}
     <Row>
       <div className='v-spacer-big' />
     </Row>
