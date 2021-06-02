@@ -23,27 +23,3 @@ export type AppState = {
     saving: boolean;
     currentUser?: User;
 };
-
-
-export type CustomText = {
-    bold?: boolean;
-    italic?: boolean;
-    code?: boolean;
-    text: string;
-}
-export type EmptyText = {
-    text: string;
-}
-export type TextElement = CustomText | EmptyText;
-export type TitleElement = { type: 'title'; children: TextElement[] };
-export type EndpointElement = { type: 'endpoint'; children: TextElement[] };
-export type CustomElement = TitleElement | EndpointElement;
-export type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
-
-declare module 'slate' {
-    interface CustomTypes {
-        Editor: CustomEditor;
-        Element: CustomElement;
-        Text: TextElement;
-    }
-}

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Configuration, DefaultApi } from './generated';
-import { Endpoint } from './types';
+import { Configuration, DefaultApi } from '../generated';
+import { Endpoint } from '../types';
 
 
 export async function wait(ms: number): Promise<void> {
@@ -116,4 +116,41 @@ export function listsEqual<T>(a: T[], b: T[], elementEqualityFunction: (ea: T, e
         }
     }
     return true;
+}
+
+
+export class FocusDispatcher<T> {
+    private callbacks: Map<T, () => void>;
+    constructor() {
+        this.callbacks = new Map();
+    }
+
+    public listen(type: T, onFocus: () => void) {
+        this.callbacks.set(type, onFocus);
+    }
+
+    public focus(type: T) {
+        const f = this.callbacks.get(type);
+        if (f) {
+            f();
+        }
+    }
+}
+
+
+export function getMethodStyle(method: string): { backgroundColor?: string, color: string } {
+    switch (method) {
+        case 'POST':
+            return { backgroundColor: 'green', color: 'white' };
+        case 'GET':
+            return { backgroundColor: 'blue', color: 'white' };
+        case 'PUT':
+            return { backgroundColor: 'orange', color: 'white' };
+        case 'PATCH':
+            return { backgroundColor: 'orange', color: 'white' };
+        case 'DELETE':
+            return { backgroundColor: 'red', color: 'white' };
+        default:
+            return { color: 'red' };
+    }
 }

@@ -52,13 +52,13 @@ def cached_gpt3(prompt: str, stop: str = '\n', use_cache: bool = True) -> str:
     return result
 
 
-def get_db_schema_text() -> str:
+def get_db_schema_text(db_name: str) -> str:
     """
     Get the schema of an SQL query.
 
     """
 
-    return str(subprocess.check_output(['sqlite3', DB_NAME, '.schema']), 'utf-8')
+    return str(subprocess.check_output(['sqlite3', db_name, '.schema']), 'utf-8')
 
 
 def english2sql(english_query: str, schema_text: Optional[str] = None, use_cache: bool = True) -> str:
@@ -269,7 +269,7 @@ con = sqlite3.connect('<<<DB_NAME>>>')
 
     '''
 
-    schema_text = get_db_schema_text()
+    schema_text = get_db_schema_text(DB_NAME)
 
     code = code.replace('<<<TITLE>>>', title)
     code = code.replace('<<<DB_NAME>>>', DB_NAME)

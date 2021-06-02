@@ -1,0 +1,42 @@
+-- MIGRATIONS
+
+create an "apis" table with id, title, and user_id
+
+create an "endpoints" table with id, method, url, value, and sql_value
+
+create a "migrations" table with id, value, and sql_value
+
+
+-- API
+
+GET /apis/get-all-for-user
+if the user is not authenticated
+    report "Invalid request"
+return a list of all apis for a certain user_id
+
+POST /apis/create
+if the user is not authenticated
+    report "Invalid request"
+create a new api for this user
+
+PATCH /apis/update
+if the user is not authenticated
+    report "Invalid request"
+update an api's title
+
+DELETE /apis/delete
+if the user is not authenticated
+    report "Invalid request"
+delete an api for a certain id
+
+
+-- ENDPOINT
+
+GET /endpoints/get-by-id{id}
+if the user is not authenticated
+    report "Invalid request"
+get an endpoint for a certain id
+
+POST /endpoints/create
+if the user is not authenticated
+    report "Invalid request"

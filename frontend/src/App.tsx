@@ -1,15 +1,38 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
     logError,
     useBackend,
     fetchApiIdsForUser,
-} from './utils';
-import Editor from './Editor';
+} from './utils/misc';
+import Editor from './components/Editor';
+import DataEditor from './components/DataEditor';
 import { Endpoint } from './types';
 import {
     API,
 } from './generated';
 import debounce from 'debounce';
+// import {
+//     BrowserRouter as Router,
+//     Switch,
+//     Route,
+//     Link
+// } from 'react-router-dom';
+import Tooltip from '@material-ui/core/Tooltip';
+import { withStyles, Theme } from '@material-ui/core/styles';
+
+
+const IconTooltip = withStyles((theme: Theme) => ({
+    tooltip: {
+      backgroundColor: 'black',
+      color: 'white',
+      boxShadow: 'none',
+      fontSize: '17px',
+      fontWeight: 'bold',
+    },
+    arrow: {
+        color: 'black',
+    },
+}))(Tooltip);
 
 
 export default function App() {
@@ -20,6 +43,7 @@ export default function App() {
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const [showLoginStuff, setShowLoginStuff] = useState(false);
     const iframeSrc = 'http://localhost:3002/docs';
+    const [page, setPage] = useState<'endpoints' | 'data' | 'functions'>('endpoints');
 
     const debouncedUpdateApi = debounce((payload: { apiId: number, title?: string, endpoints?: Endpoint[] }) => {
         backend.updateApiApiV0ApisUpdatePatch({
@@ -59,25 +83,98 @@ export default function App() {
         })().catch(logError);
     }, [currentUserId, backend]);
 
+    const renderEndpointsEditor = () => {
+        return <div className='editor-container'>
+            { api &&
+                <Editor
+                    title={api.title}
+                    endpoints={api.endpoints}
+                    onChange={handleChange}
+                    onRestart={handleRestart}
+                    previewLoading={previewLoading}
+                />
+            }
+            { showLoginStuff &&
+                <LoginBox
+                    numApis={numApis}
+                    setApi={setApi}
+                />
+            }
+        </div>;
+    };
+
+    const renderDataEditor = () => {
+        return <div className='editor-container'>
+            <DataEditor
+                migrations={['first', 'second']}
+                onChange={() => {}}
+            />
+        </div>;
+    };
+
+    const renderFunctionsEditor = () => {
+        return <div className='editor-container'>
+            functions
+        </div>;
+    };
+
+    const renderEditor = () => {
+        switch (page) {
+            case 'endpoints':
+                return renderEndpointsEditor();
+            case 'data':
+                return renderDataEditor();
+            case 'functions':
+                return renderFunctionsEditor();
+            default:
+                return null;
+        }
+    };
+
     return (
         <div className="container">
-            <div className='editor-container'>
-                { api &&
-                    <Editor
-                        title={api.title}
-                        endpoints={api.endpoints}
-                        onChange={handleChange}
-                        onRestart={handleRestart}
-                        previewLoading={previewLoading}
-                    />
-                }
-                { showLoginStuff &&
-                    <LoginBox
-                        numApis={numApis}
-                        setApi={setApi}
-                    />
-                }
+            <div className='left-bar'>
+                <IconTooltip title='Endpoints' placement='right' arrow>
+                    <div
+                        className='left-bar-icon'
+                        onClick={ev => {
+                            setPage('endpoints');
+                        }}
+                        style={{
+                            backgroundColor: page === 'endpoints' ? '#333' : undefined,
+                        }}
+                    >
+                        <img src='/rocket.svg' width={30} height={30} alt='E' />
+                    </div>
+                </IconTooltip>
+                <IconTooltip title='Data' placement='right' arrow>
+                    <div
+                        className='left-bar-icon'
+                        onClick={ev => {
+                            setPage('data');
+                        }}
+                        style={{
+                            backgroundColor: page === 'data' ? '#333': undefined,
+                        }}
+                    >
+                        <img src='/database_white.svg' width={30} height={30} alt='D' />
+                    </div>
+                </IconTooltip>
+                <IconTooltip title='Functions' placement='right' arrow>
+                    <div
+                        className='left-bar-icon'
+                        onClick={ev => {
+                            setPage('functions');
+                        }}
+                        style={{
+                            backgroundColor: page === 'data' ? '#333': undefined,
+                        }}
+                    >
+                        &lambda;
+                    </div>
+                </IconTooltip>
             </div>
+            { renderEditor() }
             <div
                 className="preview-container"
                 style={{

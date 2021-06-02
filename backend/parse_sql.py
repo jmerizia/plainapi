@@ -135,12 +135,18 @@ def parse_schema(schema_text: str) -> List[Dict[str, Any]]:
     tables_text = [s for s in tables_text if len(s) > 0]
     tables = []
     for text in tables_text:
+        if 'IF NOT EXISTS' in text:
+            # TODO: handle this case
+            continue
         table_name = text.split(' ')[2].strip()
         table_fields_text = ' '.join(text.split(' ')[3:])[1:-1].split(',')
         table_fields_text = [s.strip() for s in table_fields_text]
         table_fields_text = [s for s in table_fields_text if len(s) > 0]
         fields = []
         for text in table_fields_text:
+            if text.startswith('FOREIGN'):
+                # this is a foreign key constraint
+                continue
             tokens = text.split(' ')
             name = tokens[0]
             type = tokens[1]
@@ -194,7 +200,7 @@ def parse_query(query_text: str, schema_text: str) -> Tuple[List[Dict[str, str]]
     idx = 0
     tok, idx = consume_token(tokens, idx)
     if not tok:
-        raise ValueError('Invalid query: {query_text}\n  Expected statement')
+        raise ValueError(f'Invalid query: {query_text}\n  Expected statement')
     elif tok.upper() == 'SELECT':
         tok, idx = consume_token(tokens, idx)
         if not tok:

@@ -24,14 +24,25 @@ class UserPublic(BaseModel):
     joined: datetime
 
 class Endpoint(BaseModel):
+    id: RecordId
+    api_id: RecordId
     method: str
     url: str
     value: str
+    sql_query: str
+
+class Migration(BaseModel):
+    id: RecordId
+    api_id: RecordId
+    value: str
+    applied: bool
+    sql_query: str
 
 class API(BaseModel):
     id: RecordId
     title: str
     endpoints: List[Endpoint]
+    migrations: List[Migration]
     user_id: RecordId
     created: datetime
     updated: datetime
