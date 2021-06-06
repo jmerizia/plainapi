@@ -72,34 +72,6 @@ p {
   font-weight: bold;
 }
 
-.top-bar {
-  padding: 0;
-  margin-left: 25px;
-}
-
-.top-link-wrapper {
-  margin-top: 15px;
-  line-height: 30px;
-  margin-bottom: 15px;
-  padding: 0;
-  flex: 1;
-}
-
-.top-link {
-  font-weight: bold;
-  display: block;
-  position: relative;
-  text-decoration: underline;
-  overflow: hidden;
-  color: black;
-  font-size: 17px;
-}
-
-.top-link:hover {
-  opacity: 0.4;
-  color: black;
-}
-
 .App-signup-button {
   border-radius: 50px;
   padding-left: 15px;
