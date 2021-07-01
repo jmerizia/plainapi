@@ -5,7 +5,7 @@ It uses GPT3 to translate between user defined queries and SQL statements.
 
 Note: You will need to be in the OpenAI API Beta program in order to use this.
 If you are not in the program and would still like to use this,
-sign up at (plainapi.co)[https://plainapi.co].
+sign up at [plainapi.co](https://plainapi.co).
 
 
 ## Installation
