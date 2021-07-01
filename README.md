@@ -21,3 +21,33 @@ in your terminal to get started.
 Run `plain init` in your terminal
 to get started with a new project in the local directory.
 This will create some initial boilerplate.
+
+## Development roadmap
+
+### short term
+
+- [ ] language features:
+    - [x] endpoint method and url
+    - [ ] if/else
+    - [ ] raise error
+    - [ ] boolean expressions
+    - [ ] function calls
+    - [ ] return statements
+- [ ] deployment management
+    - [ ] adding migrations
+    - [ ] start/stop/restart commands
+- [ ] init command for quick start
+- [ ] standard library
+    - [ ] getting current date/time
+    - [ ] bcrypt hashing
+    - [ ] JWT
+    - [ ] authentication
+- [ ] repo management
+    - [ ] GitHub Actions CI
+    - [ ] tests (with cached completions?)
+
+### long term
+- web IDE
+- language server support
+- modules/packages
+- explore other text-completion language models (something machine-local?)
