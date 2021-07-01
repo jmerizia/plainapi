@@ -4,9 +4,8 @@ from parse_sql import parse_query, parse_schema, type_hint2schema_type
 import os
 import subprocess
 import pprint
-from fire import Fire
 from dotenv import load_dotenv
-import openai
+import openai  # type: ignore
 from uuid import uuid4
 import sqlite3
 import random

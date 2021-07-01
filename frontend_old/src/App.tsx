@@ -45,42 +45,45 @@ export default function App() {
     const iframeSrc = 'http://localhost:3002/docs';
     const [page, setPage] = useState<'endpoints' | 'data' | 'functions'>('endpoints');
 
-    const debouncedUpdateApi = debounce((payload: { apiId: number, title?: string, endpoints?: Endpoint[] }) => {
-        backend.updateApiApiV0ApisUpdatePatch({
-            apiId: payload.apiId,
-            title: payload.title,
-            serializedEndpoints: payload.endpoints && JSON.stringify(payload.endpoints),
-        });
-    }, 300);
-
     const handleChange = async ({ title, endpoints }: { title: string, endpoints: Endpoint[] }) => {
         if (api) {
             setApi({ ...api, title, endpoints });
-            debouncedUpdateApi({ apiId: api.id, title, endpoints });
         }
     };
 
     const handleRestart = async () => {
         if (api && iframeRef.current) {
             setPreviewLoading(true);
-            await backend.restartApiApiV0ApisRestartPost({ apiId: api.id });
+            await backend.restartApiApiV0ApisRestartPost({ aPI: api });
             iframeRef.current.src = iframeSrc;
             setPreviewLoading(false);
         }
     };
 
     useEffect(() => {
-        (async () => {
-            if (currentUserId) {
-                const apiIds = await fetchApiIdsForUser(backend, currentUserId);
-                setNumApis(apiIds.length);
-                if (apiIds.length > 0) {
-                    // just use the first for now
-                    const api = await backend.readApiApiV0ApisGetByIdGet({ apiId: apiIds[0] });
-                    setApi(api);
-                }
-            }
-        })().catch(logError);
+        setApi({
+            id: 1,
+            title: 'My API 🚀',
+            endpoints: [{
+                value: '',
+                url: '/',
+                method: 'GET',
+            }],
+            userId: 1,
+            created: new Date(),
+            updated: new Date(),
+        });
+        // (async () => {
+            // if (currentUserId) {
+                // const apiIds = await fetchApiIdsForUser(backend, currentUserId);
+                // setNumApis(apiIds.length);
+                // if (apiIds.length > 0) {
+                //     // just use the first for now
+                //     const api = await backend.readApiApiV0ApisGetByIdGet({ apiId: apiIds[0] });
+                //     setApi(api);
+                // }
+            // }
+        // })().catch(logError);
     }, [currentUserId, backend]);
 
     const renderEndpointsEditor = () => {
@@ -209,7 +212,7 @@ function LoginBox ({ numApis, setApi }: LoginBoxProps) {
     const [password, setPassword] = useState<string>('');
 
     const signup = async (email: string, password: string) => {
-        await backend.signupUserApiV0UsersSignupPost({ email, password });
+        // await backend.signupUserApiV0UsersSignupPost({ email, password });
     };
 
     return <>
@@ -220,11 +223,11 @@ function LoginBox ({ numApis, setApi }: LoginBoxProps) {
                     onClick={async ev => {
                         try {
                             if (currentUserId) {
-                                const api = await backend.createApiApiV0ApisCreatePost({
-                                    userId: currentUserId, title: 'My API',
-                                    serializedEndpoints: JSON.stringify([]),
-                                });
-                                setApi(api);
+                                // const api = await backend.createApiApiV0ApisCreatePost({
+                                //     userId: currentUserId, title: 'My API',
+                                //     serializedEndpoints: JSON.stringify([]),
+                                // });
+                                // setApi(api);
                             }
                         } catch (err) {
                             logError(err);

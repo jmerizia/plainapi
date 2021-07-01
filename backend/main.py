@@ -9,7 +9,7 @@ import bcrypt
 
 from models import RecordId, Token, User, UserPublic, API, Endpoint
 from utils import expect_env, clean_user
-import queries
+import queries as queries
 from manager import Manager
 
 
@@ -190,10 +190,9 @@ async def delete_api(current_user: User = Depends(get_current_user), api: API = 
     queries.delete_api(id=api.id)
 
 @app.post(PREFIX + '/apis/restart', response_model=None)
-async def restart_api(api: API = Depends(get_current_api),
-                      current_user: User = Depends(get_current_user)) -> None:
-    if not current_user.is_admin and current_user.id != api.user_id:
-        raise HTTPException(status_code=401, detail='Unauthorized request')
+async def restart_api(api: API) -> None:
+    # if not current_user.is_admin and current_user.id != api.user_id:
+    #     raise HTTPException(status_code=401, detail='Unauthorized request')
     manager.set_api(api)
     manager.restart()
 

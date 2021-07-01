@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
 import sys
-sys.path.append('.')
+import fire  # type: ignore
 
 from parse_sql import parse_query, parse_schema
 from generate import get_db_schema_text
-import fire
 
 
 def generate_queries(queries_fn: str = './queries.sql', output_fn: str = './queries.py'):

@@ -1,14 +1,14 @@
 from typing import List, Optional, Tuple
-from models import API, Endpoint
 from subprocess import Popen, PIPE
 from dotenv import load_dotenv
 import os
 from datetime import datetime
 import time
-from utils import expect_env
-import openai
+import openai  # type: ignore
 
-from generate import generate_app
+from utils import expect_env
+from models import API, Endpoint
+from generate import generate_app, run_necessary_migrations
 
 
 load_dotenv()
@@ -57,6 +57,9 @@ class Manager:
 
     def clear_api(self):
         self.api = None
+
+    def apply_migrations(self, migrations: str):
+        run_necessary_migrations(sql_migrations=)
 
 
 if __name__ == '__main__':
