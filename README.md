@@ -10,7 +10,7 @@ sign up at [plainapi.co](https://plainapi.co).
 
 ## Installation
 
-You should have Python 3.8 to run this.
+You should have Python 3.6+ to run this.
 
 Run
 `pip install git+https://github.com/jmerizia/plainapi.git#egg=plainapi`
