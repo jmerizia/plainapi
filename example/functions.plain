@@ -1,0 +1,26 @@
+is good password:
+    * requires password, returns true/false *
+    password is at least 8 characters long
+
+get random nickname:
+    * returns string *
+    names <- get the lines of "names.txt" as a list of strings
+    report a random name from {names}
+
+hash a password:
+    * takes password, returns nothing *
+    hashed password <- hash {password} with a random salt using bcrypt
+    return hashed password
+
+check password matches hashed password
+    * requires password and hashed password, returns true/false *
+    (internal)
+
+create JWT token
+    * requires optional subject and expiration, returns string *
+    (internal)
+
+send verification email:
+    * requires email address, nickname *
+    token <- create a JWT token with sub = {email}, and exp = 24 hours from now with the secret APP_SECRET
+    send an email to {email} with the subject "PlainAPI email verification" and the message "Hello, {nickname}! Please click <a href='https://plainapi.co/users/verify/{token}'>this link</a> to verify your account. If you did not request this email, please ignore this email."

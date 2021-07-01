@@ -1,0 +1,56 @@
+My API
+
+
+GET at /users/{id}
+user <- get a user with id {id}
+if user is not defined
+    report 400: "No such user"
+otherwise
+    remove the email field from user
+    return user
+
+GET at url /users/with-email/{email}
+    * requires auth *  # this will add a "current_user" variable
+    if the current user is not an admin
+        report 400: "Forbidden"
+    user <- get a user with email {email}
+    if user is not defined
+        report 400: No such user
+    otherwise
+        return user
+
+GET at url /users
+    * requires auth *
+    if the current user is not an admin
+        report 400: "Forbidden"
+    report all the users from the db
+
+GET at url /users/email/{id}
+    * requires auth *
+    if the current user is not an admin and their id is not equal to {id}
+        report 400 "Forbidden"
+    return the email of the user with id {id}
+
+POST at url /users/signup
+    * requires email, password *
+    existing user <- get a user with email equal to {email}
+    if existing user is defined
+        report "A user with that email already exists"
+    if {password} is not a good password
+        report "Bad password"
+    hashed password <- hash {password}
+    nickname <- get a random name
+    now <- get the current utc time
+    new user <- create a new user (not admin) with nickname = {nickname}, created and updated set to {now}, email set to {email}, verified set to false, and a score of 0
+    send verification email to {email} with {nickname}
+    return {new user}
+
+POST at url /users/login
+    * requires email, password *
+    user <- get a user with email equal to {email}
+    if user is not defined
+        report "Invalid email or password"
+    if the {password} doesn't match the user's hashed password
+        report "Invalid email or password"
+    token <- create a JWT token with sub = {email} and exp = 30 days from now
+    return an object with access_token = {token}, token_type = "bearer", and id = the user's id

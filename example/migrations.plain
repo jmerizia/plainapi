@@ -1,0 +1,1 @@
+create a table called users with id, email, first_name, last_name, is_verified, is_admin, and created_at (timestamp)
