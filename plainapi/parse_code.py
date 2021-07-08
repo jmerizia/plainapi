@@ -34,12 +34,12 @@ class IfStatement(TypedDict):
     case_true: 'CodeBlock'
     case_false: Optional['CodeBlock']
 
-# class ExceptionStatement(TypedDict):
-#     type: Literal['ExceptionStatement']
-#     code: Optional[int]
-#     message: Optional[str]
+class ExceptionStatement(TypedDict):
+    type: Literal['exception']
+    code: Optional[int]
+    message: Optional[str]
 
-Statement = Union[IfStatement, FunctionCallStatement]
+Statement = Union[IfStatement, FunctionCallStatement, ExceptionStatement]
 
 CodeBlock = List[Statement]
 
@@ -181,8 +181,41 @@ def count_leading_spaces(text: str) -> int:
     return cnt
 
 
-# def parse_exception(code: str) -> ExceptionStatement:
+def parse_exception(text: str) -> ExceptionStatement:
+    pass
 
+    prompt = \
+f"""The following statements represent exception statements. Parse them into form "code=<code>, message=<message>". If the code or message are not present, put "None" for that value.
+
+Statement: report 400: "Forbidden"
+Parsed: code=400, message="Forbidden"
+
+Statement: report "Bad password"
+Parsed: code=None, message="Bad password"
+
+Statement: raise 100
+Parsed: code=100, message=None
+
+Statement: throw "Not enough data", 500
+Parsed: code=500, message="Not enough data"
+
+Statement: {text.strip()}
+Parsed:"""
+
+    result = cached_complete(prompt, engine='curie')
+    parts = result.split(',')
+    assert len(parts) == 2
+    code_parts = parts[0].split('=')
+    message_parts = parts[1].split('=')
+    assert len(code_parts) == 2
+    assert len(message_parts) == 2
+    assert code_parts[0] == 'code'
+    assert message_parts[0] == 'message'
+    return ExceptionStatement(
+        type='exception',
+        code=int(code_parts[1]),
+        message=message_parts[1]
+    )
 
 
 def parse_code_block(lines: List[str], context: Context, global_line_offset: int = 0, local_line_index: int = 0, prev_indent: int = 0, descend_block: bool = False) -> Tuple[Optional[Statement], Context, int]:
@@ -225,7 +258,7 @@ def parse_code_block(lines: List[str], context: Context, global_line_offset: int
                 case_true=case_true,
                 case_false=None
             )
-            return stat, context, local_line_index
+            return stat, context, local_line_index + 1
         else:
             # at this point, we have climbed out of any children of the if statement true case
             indent = count_leading_spaces(lines[local_line_index])
@@ -256,7 +289,7 @@ def parse_code_block(lines: List[str], context: Context, global_line_offset: int
                     case_true=case_true,
                     case_false=case_false
                 )
-                return stat, context, local_line_index
+                return stat, context, local_line_index + 1
             elif next_statement_type == 'elif':
                 # TODO: implement else-if chains (leaving it out for now to reduce complexity)
                 raise ValueError('else-if chains are not implemented yet!')
@@ -268,10 +301,11 @@ def parse_code_block(lines: List[str], context: Context, global_line_offset: int
                     case_true=case_true,
                     case_false=None
                 )
-                return stat, context, local_line_index
+                return stat, context, local_line_index + 1
 
     elif code_block_type == 'exception':
-        raise ValueError('TODO')
+        exception = parse_exception(lines[local_line_index])
+        return exception, context, local_line_index + 1
 
     elif code_block_type == 'assignment':
         raise ValueError('TODO')
