@@ -1,6 +1,7 @@
 demo.db
 __pycache__/
 cache/
+dist/
 .env
 *.swp
 *.swo
