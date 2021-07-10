@@ -1,5 +1,6 @@
 from typing import Literal, Optional, Tuple, List, TypedDict, Union, Dict, Any, cast
 import itertools
+import json
 
 from plainapi.gpt3 import cached_complete
 
@@ -39,7 +40,12 @@ class ExceptionStatement(TypedDict):
     code: Optional[int]
     message: Optional[str]
 
-Statement = Union[IfStatement, FunctionCallStatement, ExceptionStatement]
+class AssignmentStatement(TypedDict):
+    type: Literal['assignment']
+    name: str
+    value: str
+
+Statement = Union[IfStatement, FunctionCallStatement, ExceptionStatement, AssignmentStatement]
 
 CodeBlock = List[Statement]
 
@@ -218,6 +224,37 @@ Parsed:"""
     )
 
 
+def parse_assignment(text: str) -> AssignmentStatement:
+
+    prompt = \
+f"""Each of the following statements represent assignment statements. For each, parse out the name of the variable from the value statement as a json.
+
+Description: hashed password <- hash {{password}}
+Parsed: {{"name": "hashed password", "value": "hash {{password}}"}}
+
+Description: let oldest user be the oldest user in the database
+Parsed: {{"name": "oldest user", "value": "the oldest user in the database"}}
+
+Description: Assign "last post" to the most recent post
+Parsed: {{"name": "last post", "value": "the most recent post"}}
+
+Description: user <- get a user with name equal to "Jake"
+Parsed: {{"name": "user", "value": "get a user with name equal to \"Jake\""}}
+
+Description: {text.strip()}
+Parsed:"""
+
+    result = cached_complete(prompt, engine='curie')
+    parsed = json.loads(result)
+    name = parsed['name']
+    value = parsed['value']
+    return AssignmentStatement(
+        type='assignment',
+        name=name,
+        value=value
+    )
+
+
 def parse_code_block(lines: List[str], context: Context, global_line_offset: int = 0, local_line_index: int = 0, prev_indent: int = 0, descend_block: bool = False) -> Tuple[Optional[Statement], Context, int]:
     if local_line_index >= len(lines):
         return None, context, local_line_index
@@ -304,11 +341,12 @@ def parse_code_block(lines: List[str], context: Context, global_line_offset: int
                 return stat, context, local_line_index + 1
 
     elif code_block_type == 'exception':
-        exception = parse_exception(lines[local_line_index])
-        return exception, context, local_line_index + 1
+        exception_stat = parse_exception(lines[local_line_index])
+        return exception_stat, context, local_line_index + 1
 
     elif code_block_type == 'assignment':
-        raise ValueError('TODO')
+        assignment_stat = parse_assignment(lines[local_line_index])
+        return assignment_stat, context, local_line_index + 1
 
     elif code_block_type == 'something-else':
         raise ValueError('TODO')
