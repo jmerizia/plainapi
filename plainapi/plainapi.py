@@ -5,7 +5,8 @@ import configparser
 import argparse
 
 from plainapi.utils import get_db_schema_text
-from plainapi.generate_python import parse_application, generate_app
+from plainapi.generate_python import generate_app
+from plainapi.parse_application import parse_application
 
 
 def main():

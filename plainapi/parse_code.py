@@ -3,6 +3,8 @@ import itertools
 import json
 
 from plainapi.gpt3 import cached_complete
+from plainapi.generate_sql import english2sql
+from plainapi.utils import get_db_schema_text
 
 
 class Variable(TypedDict):
@@ -45,7 +47,29 @@ class AssignmentStatement(TypedDict):
     name: str
     value: str
 
-Statement = Union[IfStatement, FunctionCallStatement, ExceptionStatement, AssignmentStatement]
+class PythonStatement(TypedDict):
+    type: Literal['python']
+    original: str
+    code: str
+
+class SQLStatement(TypedDict):
+    type: Literal['sql']
+    original: str
+    sql: str
+
+class OutputStatement(TypedDict):
+    type: Literal['output']
+    value: str
+
+Statement = Union[
+    IfStatement,
+    FunctionCallStatement,
+    ExceptionStatement,
+    AssignmentStatement,
+    PythonStatement,
+    SQLStatement,
+    OutputStatement,
+]
 
 CodeBlock = List[Statement]
 
@@ -148,7 +172,7 @@ function name:"""
 def determine_else_or_elif(text: str) -> Tuple[Literal['else', 'elif', 'n/a'], Optional[str]]:
 
     prompt = \
-f"""Determine if the following statements represent a terminal "else" code block, or an "else-if" code block. If it's an else block, put "else" and if it's an else-if, put "else-if: " followed by the condition itself. If neither of these make sense, put "n/a".
+f"""Determine if the following statements represent an "if" block, a terminal "else" code block, or an "else-if" code block. If it's an else block, put "else", if it's an if, put "if:" followed by the condition itself, and if it's an else-if, put "else-if: " followed by the condition. If neither of these make sense, put "n/a".
 
 Statement: else
 Type: else
@@ -160,6 +184,12 @@ Statement: otherwise
 Type: else
 
 Statement: go to the moon
+Type: n/a
+
+Statement: if {{password}} is not a good password
+Type: if: {{password}} is not a good password
+
+Statement: report something
 Type: n/a
 
 Statement: {text.strip()}
@@ -215,12 +245,14 @@ Parsed:"""
     message_parts = parts[1].split('=')
     assert len(code_parts) == 2
     assert len(message_parts) == 2
-    assert code_parts[0] == 'code'
-    assert message_parts[0] == 'message'
+    assert code_parts[0].strip() == 'code'
+    assert message_parts[0].strip() == 'message'
+    code_str = code_parts[1].strip()
+    code = int(code_str) if code_str != 'None' else None
     return ExceptionStatement(
         type='exception',
-        code=int(code_parts[1]),
-        message=message_parts[1]
+        code=code,
+        message=message_parts[1].strip()
     )
 
 
@@ -255,101 +287,180 @@ Parsed:"""
     )
 
 
-def parse_code_block(lines: List[str], context: Context, global_line_offset: int = 0, local_line_index: int = 0, prev_indent: int = 0, descend_block: bool = False) -> Tuple[Optional[Statement], Context, int]:
-    if local_line_index >= len(lines):
-        return None, context, local_line_index
-    indent = count_leading_spaces(lines[local_line_index])
-    if descend_block:
-        if not indent > prev_indent:
-            raise ValueError(f'Expected indented block on line {global_line_offset + local_line_index}.')
-    else:
-        if indent != prev_indent:
-            # we are now climbing out of the indentation tree
-            return None, context, local_line_index
+def parse_python_or_sql_statement(text: str, schema_text: str) -> Union[PythonStatement, SQLStatement]:
 
-    code_block_type = determine_code_block_type(lines[local_line_index])
-    if code_block_type == 'if':
-        original_indent = indent
-        condition = lines[local_line_index][2:].strip()
-        case_true: CodeBlock = []
-        for idx in itertools.count():
-            case_true_stat, context, local_line_index = parse_code_block(
+    prompt = \
+"""Convert each of the following statements into one line of Python code. If it is better suited by an SQL statement, just put "sql".
+Note: in the current context, the following variables already exist:
+users: List[User]
+i: int
+j: int
+
+where,
+User is a TypedDict with fields "id": int, "email": str, and "joined": datetime.
+
+Statement: take the sum of i and j
+Python: sum(i, j)
+
+Statement: if i is greater than j
+Python: i > j
+
+Statement: sort the users by id
+Python: list(sorted(users, key=lambda u: u["id"]))
+
+Statement: get the emails of all the users
+Python: sql
+
+Statement: if the product of i and j exceeds the number of users
+Python: i * j > len(users)
+
+Statement: {text}
+Python:"""
+
+    result = cached_complete(prompt, engine='curie').strip()
+    if result == 'sql':
+        sql = english2sql(english_query=text, schema_text=schema_text)
+        return SQLStatement(
+            type='sql',
+            original=text,
+            sql=sql
+        )
+    else:
+        return PythonStatement(
+            type='python',
+            original=text,
+            code=result
+        )
+
+
+def parse_output(text: str) -> OutputStatement:
+
+    prompt = \
+f"""For the following statements, parse out what should be returned.
+
+Statement: output the oldest user
+Output: the oldest user
+
+Statement: return {{user}}
+Output: {{user}}
+
+Statement: {text.strip()}
+Output:"""
+
+    result = cached_complete(prompt, engine='curie')
+    stat = OutputStatement(
+        type='output',
+        value=result.strip()
+    )
+    return stat
+
+
+def _parse_code_block(lines: List[str], context: Context, schema_text: str, global_line_offset: int, local_line_index: int, should_indent: bool) -> Tuple[CodeBlock, Context, int]:
+    assert local_line_index < len(lines)
+    original_indent = count_leading_spaces(lines[local_line_index])
+    prev_line = lines[local_line_index - 1]
+    prev_indent = count_leading_spaces(prev_line)
+    if should_indent and prev_indent >= original_indent:
+        raise ValueError(f'Expected indented block on line {global_line_offset + local_line_index}.')
+
+    block: CodeBlock = []
+    while local_line_index < len(lines):
+        current_indent = count_leading_spaces(lines[local_line_index])
+        if current_indent < original_indent:
+            break
+        line_type = determine_code_block_type(lines[local_line_index])
+        if line_type == 'if':
+            condition = lines[local_line_index][2:].strip()
+            if local_line_index == len(lines) - 1:
+                raise ValueError('Expected indented code block after "if" statement.')
+            case_true_block, context, local_line_index = _parse_code_block(
                 lines=lines,
                 context=context,
+                schema_text=schema_text,
                 global_line_offset=global_line_offset,
                 local_line_index=local_line_index + 1,
-                prev_indent=indent,
-                # only the first block is "descending" (the rest should match indentation)
-                descend_block=(idx == 0)
+                should_indent=True
             )
-            if case_true_stat is None or local_line_index >= len(lines):
-                break
-            case_true.append(case_true_stat)
-            indent = count_leading_spaces(lines[local_line_index])
-        # check if we reached the end
-        if local_line_index >= len(lines):
-            stat = IfStatement(
-                type='if',
-                context=context,
-                condition=condition,
-                case_true=case_true,
-                case_false=None
-            )
-            return stat, context, local_line_index + 1
-        else:
-            # at this point, we have climbed out of any children of the if statement true case
-            indent = count_leading_spaces(lines[local_line_index])
-            if original_indent != indent:
-                raise ValueError(f'Expected indent of else block on line {global_line_offset + local_line_index} to match original indent.')
-
-            next_statement_type, next_condition = determine_else_or_elif(lines[local_line_index])
-            if next_statement_type == 'else':
-                case_false: CodeBlock = []
-                for idx in itertools.count():
-                    case_false_stat, context, local_line_index = parse_code_block(
-                        lines=lines,
-                        context=context,
-                        global_line_offset=global_line_offset,
-                        local_line_index=local_line_index + 1,
-                        prev_indent=indent,
-                        # only the first block is "descending" (the rest should match indentation)
-                        descend_block=(idx == 0)
-                    )
-                    if case_false_stat is None or local_line_index >= len(lines):
-                        break
-                    case_false.append(case_false_stat)
-                    indent = count_leading_spaces(lines[local_line_index])
+            # check if we reached the end
+            if local_line_index >= len(lines):
                 stat = IfStatement(
                     type='if',
                     context=context,
                     condition=condition,
-                    case_true=case_true,
-                    case_false=case_false
-                )
-                return stat, context, local_line_index + 1
-            elif next_statement_type == 'elif':
-                # TODO: implement else-if chains (leaving it out for now to reduce complexity)
-                raise ValueError('else-if chains are not implemented yet!')
-            else:
-                stat = IfStatement(
-                    type='if',
-                    context=context,
-                    condition=condition,
-                    case_true=case_true,
+                    case_true=case_true_block,
                     case_false=None
                 )
-                return stat, context, local_line_index + 1
+                block.append(stat)
+            else:
+                # at this point, we have climbed out of any children of the if statement true case
+                indent = count_leading_spaces(lines[local_line_index])
+                if original_indent != indent:
+                    raise ValueError(f'Expected indent of else block on line {global_line_offset + local_line_index} to match original indent.')
+                next_statement_type, next_condition = determine_else_or_elif(lines[local_line_index])
+                if next_statement_type == 'else':
+                    if local_line_index == len(lines) - 1:
+                        raise ValueError('Expected indented block after "else" statement.')
+                    case_false_block, context, local_line_index = _parse_code_block(
+                        lines=lines,
+                        context=context,
+                        schema_text=schema_text,
+                        global_line_offset=global_line_offset,
+                        local_line_index=local_line_index + 1,
+                        should_indent=True
+                    )
+                    stat = IfStatement(
+                        type='if',
+                        context=context,
+                        condition=condition,
+                        case_true=case_true_block,
+                        case_false=case_false_block
+                    )
+                    block.append(stat)
+                elif next_statement_type == 'elif':
+                    # TODO: implement else-if chains (leaving it out for now to reduce complexity)
+                    print(lines[local_line_index])
+                    raise ValueError('else-if chains are not implemented yet!')
+                else:
+                    stat = IfStatement(
+                        type='if',
+                        context=context,
+                        condition=condition,
+                        case_true=case_true_block,
+                        case_false=None
+                    )
+                    block.append(stat)
 
-    elif code_block_type == 'exception':
-        exception_stat = parse_exception(lines[local_line_index])
-        return exception_stat, context, local_line_index + 1
+        elif line_type == 'exception':
+            exception_stat = parse_exception(lines[local_line_index])
+            block.append(exception_stat)
 
-    elif code_block_type == 'assignment':
-        assignment_stat = parse_assignment(lines[local_line_index])
-        return assignment_stat, context, local_line_index + 1
+        elif line_type == 'assignment':
+            assignment_stat = parse_assignment(lines[local_line_index])
+            block.append(assignment_stat)
 
-    elif code_block_type == 'something-else':
-        raise ValueError('TODO')
+        elif line_type == 'output':
+            output_stat = parse_output(lines[local_line_index])
+            block.append(output_stat)
 
-    else:
-        raise ValueError(f'Invalid statement on line {global_line_offset + local_line_index}')
+        elif line_type == 'something-else':
+            raise ValueError('TODO')
+
+        else:
+            raise ValueError(f'Invalid statement on line {global_line_offset + local_line_index}')
+    
+        local_line_index += 1
+
+    return block, context, local_line_index
+
+
+def parse_code_block(lines: List[str], context: Context, schema_text: str, global_line_offset: int) -> CodeBlock:
+    assert len(lines) > 0
+    block, context, local_line_index = _parse_code_block(
+        lines=lines,
+        context=context,
+        schema_text=schema_text,
+        global_line_offset=global_line_offset,
+        local_line_index=0,
+        should_indent=False
+    )
+    return block

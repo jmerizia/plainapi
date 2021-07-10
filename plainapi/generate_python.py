@@ -3,7 +3,8 @@ import os
 from dotenv import load_dotenv
 import openai  # type: ignore
 
-from plainapi.parse_endpoint import parse_endpoint, Endpoint
+from plainapi.parse_endpoint import Endpoint
+from plainapi.parse_application import Application
 
 
 load_dotenv('./.env')
@@ -13,31 +14,10 @@ if OPENAI_API_KEY is None:
 openai.api_key = OPENAI_API_KEY
 
 
-class Application(TypedDict):
-    title: str
-    endpoints: list[Endpoint]
-
-
 def url2endpoint_function_name(url: str) -> str:
     clean = ''.join(c if c.isalnum() else ' ' for c in url)
     parts = [s.strip() for s in clean.split(' ') if s.strip() != '']
     return 'endpoint_' + '_'.join(parts)
-
-
-def parse_application(endpoints_code: str, functions_code: str, schema_text: str) -> Application:
-    blocks = [s.strip() for s in endpoints_code.split('\n\n') if s.strip() != '']
-    if len(blocks) < 1:
-        raise ValueError('Expected at least one block in the endpoints file (for the title).')
-    title_block = blocks[0]
-    title = title_block.split('\n')[0].strip()
-    endpoints: list[Endpoint] = []
-    for block in blocks[1:]:
-        endpoint = parse_endpoint(block, schema_text)
-        endpoints.append(endpoint)
-    return {
-        'title': title,
-        'endpoints': endpoints
-    }
 
 
 def generate_endpoint(endpoint: Endpoint, schema_text: str, use_cache=True) -> str:

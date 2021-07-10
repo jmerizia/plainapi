@@ -9,6 +9,8 @@ Turn the following English sentences into valid SQLite statements. Here's the da
 
 {schema_text}
 
+The first three examples will be about a table called "apples" with id, name, weight, and is_green, but the rest should refer to the above schema.
+
 English: get all of the apples
 SQL: SELECT * FROM apples;
 
@@ -21,5 +23,5 @@ SQL: INSERT INTO apples (name, weight, is_green) VALUES (?, ?, false);
 English: {english_query.strip()}
 SQL:"""
 
-    response = cached_complete(prompt)
+    response = cached_complete(prompt, engine='davinci')
     return response

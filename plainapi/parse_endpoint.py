@@ -1,6 +1,7 @@
 from typing import Literal, Tuple, List, TypedDict, Union, Dict, Any, cast
 
 from plainapi.gpt3 import cached_complete
+from plainapi.parse_code import CodeBlock, Context, parse_code_block
 
 
 class Header(TypedDict):
@@ -26,7 +27,7 @@ class FunctionTypeDefinition(TypedDict):
 class Endpoint(TypedDict):
     header: Header
     requirements: FunctionTypeDefinition
-    implementation: str
+    implementation: CodeBlock
 
 
 def parse_header(header_string: str) -> Header:
@@ -106,17 +107,24 @@ function stub:"""
     }
 
 
-def parse_endpoint(endpoint_string: str, schema_text: str) -> Endpoint:
+def parse_endpoint(endpoint_string: str, schema_text: str, global_line_offset: int) -> Endpoint:
     lines = endpoint_string.split('\n')
     if len(lines) < 3:
         raise ValueError('Expected endpoint to be at least 3 lines long (header, requirements, and implementation)')
     header_string = lines[0]
     requirements_string = lines[1]
-    implementation_string = '\n'.join(lines[2:])
+    implementation_lines = lines[2:]
     header = parse_header(header_string)
     requirements = parse_requirements(requirements_string)
+    context = Context(variables=[])
+    implementation = parse_code_block(
+        lines=implementation_lines,
+        context=context,
+        schema_text=schema_text,
+        global_line_offset=global_line_offset + 2
+    )
     return {
         'header': header,
         'requirements': requirements,
-        'implementation': implementation_string
+        'implementation': implementation
     }

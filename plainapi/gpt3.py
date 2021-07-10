@@ -35,4 +35,5 @@ def cached_complete(prompt: str, stop: str = '\n', engine: Literal['davinci', 'c
     with open(cache_file, 'w') as f:
         f.write(prompt + separator + result)
 
+    print(engine, result)
     return result
