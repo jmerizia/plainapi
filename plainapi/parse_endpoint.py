@@ -1,7 +1,7 @@
 from typing import Literal, Tuple, List, TypedDict, Union, Dict, Any, cast
 
 from plainapi.gpt3 import cached_complete
-from plainapi.parse_code import CodeBlock, Context, parse_code_block
+from plainapi.parse_code import CodeBlock, Context, Variable, parse_code_block
 
 
 class Header(TypedDict):
@@ -47,7 +47,7 @@ method and url: POST /users/signup
 description: {header_string.strip()}
 method and url:"""
 
-    result = cached_complete(prompt, engine='curie').strip()
+    result = cached_complete(prompt, engine='davinci').strip()
     method_url = [s.strip() for s in result.split(' ')]
     if len(method_url) != 2:
         raise ValueError(f'Internal Error: Unexpected number of arguments in header: {result}')
@@ -92,19 +92,25 @@ function stub:"""
     output_strings = [s.strip() for s in outputs_string[1:-1].split(',')]
     for input in input_strings:
         name, type = [s.strip() for s in input.split(':')]
-        inputs.append({
-            'name': name,
-            'type': type,
-        })
+        if name == 'auth':
+            inputs.append({
+                'name': 'current_user',
+                'type': 'User',
+            })
+        else:
+            inputs.append({
+                'name': name,
+                'type': type,
+            })
     for output in output_strings:
         outputs.append({
             'name': 'unknown',
             'type': output
         })
-    return {
-        'inputs': inputs,
-        'outputs': outputs,
-    }
+    return FunctionTypeDefinition(
+        inputs=inputs,
+        outputs=outputs
+    )
 
 
 def parse_endpoint(endpoint_string: str, schema_text: str, global_line_offset: int) -> Endpoint:
@@ -116,15 +122,16 @@ def parse_endpoint(endpoint_string: str, schema_text: str, global_line_offset: i
     implementation_lines = lines[2:]
     header = parse_header(header_string)
     requirements = parse_requirements(requirements_string)
-    context = Context(variables=[])
+    variables = [Variable(name=r['name'], type=r['type']) for r in requirements['inputs']]
+    context = Context(variables=variables)
     implementation = parse_code_block(
         lines=implementation_lines,
         context=context,
         schema_text=schema_text,
         global_line_offset=global_line_offset + 2
     )
-    return {
-        'header': header,
-        'requirements': requirements,
-        'implementation': implementation
-    }
+    return Endpoint(
+        header=header,
+        requirements=requirements,
+        implementation=implementation,
+    )

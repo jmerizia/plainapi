@@ -11,6 +11,8 @@ def cached_complete(prompt: str, stop: str = '\n', engine: Literal['davinci', 'c
     if not os.path.exists(CACHE_DIR):
         os.mkdir(CACHE_DIR)
 
+    cache_key = engine + '###' + prompt
+
     separator = '\n===========\n'
     if use_cache:
         # Check the cache
@@ -18,7 +20,7 @@ def cached_complete(prompt: str, stop: str = '\n', engine: Literal['davinci', 'c
         for fn in cache_files:
             with open(fn, 'r') as f:
                 query, result = f.read().split(separator)
-            if query == prompt:
+            if query == cache_key:
                 return result
 
     response = cast(Any, openai.Completion.create(
@@ -33,7 +35,7 @@ def cached_complete(prompt: str, stop: str = '\n', engine: Literal['davinci', 'c
     # Add to the cache
     cache_file = os.path.join(CACHE_DIR, str(uuid4()))
     with open(cache_file, 'w') as f:
-        f.write(prompt + separator + result)
+        f.write(cache_key + separator + result)
 
     print(engine, result)
     return result

@@ -25,37 +25,41 @@ class Interval(TypedDict):
 
 class FunctionCallStatement(TypedDict):
     type: Literal['function_call']
-    context: Context
     function_name: str
     inputs: List[Variable]
     outputs: List[Variable]
-
-class IfStatement(TypedDict):
-    type: Literal['if']
-    context: Context
-    condition: str
-    case_true: 'CodeBlock'
-    case_false: Optional['CodeBlock']
 
 class ExceptionStatement(TypedDict):
     type: Literal['exception']
     code: Optional[int]
     message: Optional[str]
 
-class AssignmentStatement(TypedDict):
-    type: Literal['assignment']
-    name: str
-    value: str
+class PythonConditionalStatement(TypedDict):
+    type: Literal['python-conditional']
+    original: str
+    code: str
 
 class PythonStatement(TypedDict):
     type: Literal['python']
     original: str
     code: str
+    return_type: str
+
+class IfStatement(TypedDict):
+    type: Literal['if']
+    condition: PythonConditionalStatement
+    case_true: 'CodeBlock'
+    case_false: Optional['CodeBlock']
 
 class SQLStatement(TypedDict):
     type: Literal['sql']
     original: str
     sql: str
+
+class AssignmentStatement(TypedDict):
+    type: Literal['assignment']
+    name: str
+    value: Union[PythonStatement, SQLStatement]
 
 class OutputStatement(TypedDict):
     type: Literal['output']
@@ -67,6 +71,7 @@ Statement = Union[
     ExceptionStatement,
     AssignmentStatement,
     PythonStatement,
+    PythonConditionalStatement,
     SQLStatement,
     OutputStatement,
 ]
@@ -88,14 +93,15 @@ f"""For each of the following statements, determine what kind of statement it wo
 "something-else"
 
 Note: If you're confused, just put something-else
+Hint: Assignment statements will have a "=" or "<-" in it, or the word "let" at the beginning.
 
 Statement: user <- get a user with email {{email}}
 Type: assignment
-Reason: the left arrow
+Reason: the "<-" arrow
 
 Statement: let "apples" be all the applies that are red
 Type: assignment
-Reason: the initial "let"
+Reason: the initial word "let"
 
 Statement: report 400 "Forbidden"
 Type: exception
@@ -117,10 +123,14 @@ Statement: send verification email to {{email}} with {{nickname}}
 Type: something-else
 Reason: this is better handled with a function call, not an exception, assignment, or output.
 
+Statement: new user <- func: create
+Type: assignment
+Reason: the "<-" arrow
+
 Statement: {first_line.strip()}
 Type:"""
 
-    result = cached_complete(prompt, engine='curie').strip()
+    result = cached_complete(prompt, engine='davinci').strip()
     if result == 'exception' or result == 'assignment' or result == 'output' or result == 'something-else':
         return result
     else:
@@ -256,7 +266,7 @@ Parsed:"""
     )
 
 
-def parse_assignment(text: str) -> AssignmentStatement:
+def parse_assignment(text: str, context: Context, schema_text: str) -> AssignmentStatement:
 
     prompt = \
 f"""Each of the following statements represent assignment statements. For each, parse out the name of the variable from the value statement as a json.
@@ -280,57 +290,125 @@ Parsed:"""
     parsed = json.loads(result)
     name = parsed['name']
     value = parsed['value']
+    value_type = determine_python_or_sql_statement(text)
+    if value_type == 'sql':
+        value_stat = SQLStatement(
+            type='sql',
+            original=value,
+            sql=english2sql(text, schema_text=schema_text)
+        )
+    elif value_type == 'python':
+        value_stat = parse_python_statement(text, context)
+    else:
+        raise ValueError('Internal Error')
     return AssignmentStatement(
         type='assignment',
         name=name,
-        value=value
+        value=value_stat
     )
 
 
-def parse_python_or_sql_statement(text: str, schema_text: str) -> Union[PythonStatement, SQLStatement]:
+def determine_python_or_sql_statement(text: str) -> Literal['python', 'sql']:
+    if text.strip().startswith('sql'):
+        return 'sql'
+    return 'python'
+
+
+def parse_python_statement(text: str, context: Context) -> PythonStatement:
+
+    context_string = ''
+    for var in context['variables']:
+        context_string += var['name'] + ': ' + var['type'] + '\n'
 
     prompt = \
-"""Convert each of the following statements into one line of Python code. If it is better suited by an SQL statement, just put "sql".
-Note: in the current context, the following variables already exist:
-users: List[User]
+f"""Convert each of the following statements to a one line Python statement.
+
+The first few examples will use the following variables:
+a: bool
+b: bool
 i: int
 j: int
+person: class with fields id: int, email: str
+people: List[Person]
 
-where,
-User is a TypedDict with fields "id": int, "email": str, and "joined": datetime.
+Statement: the sum of i and j plus 10 if b is true
+Python: i + j + (10 if b else 0)
 
-Statement: take the sum of i and j
-Python: sum(i, j)
+Statement: sort the people
+Python: list(sort(people))
+
+Statement: find the person where id is {{id}}
+Python: [p for p in people if p.id == id]
+
+Statement: the person with the largest id if there are people, otherwise none
+Python: max(people, key=lambda p: p.id) if len(people) > 0 else None
+
+The next few examples will use the following variables:
+{context_string}
+
+Statement: {text.strip()}
+Python:"""
+
+    result = cached_complete(prompt, engine='davinci').strip()
+    return PythonStatement(
+        type='python',
+        original=text,
+        code=result,
+        return_type='TODO'
+    )
+
+
+def parse_python_conditional_statement(text: str, context: Context) -> PythonConditionalStatement:
+
+    context_string = ''
+    for var in context['variables']:
+        context_string += var['name'] + ': ' + var['type'] + '\n'
+
+    prompt = \
+f"""Convert each of the following statements into a one line Python conditional statement.
+
+The first few examples will use the following variables:
+a: bool
+b: bool
+i: int
+j: int
+people: List[Person]
+(where Person is a class with fields id: int, email: str)
+
+Statement: the sum of i and j is greater than 10
+Python: i + j > 10
 
 Statement: if i is greater than j
 Python: i > j
 
-Statement: sort the users by id
-Python: list(sorted(users, key=lambda u: u["id"]))
+Statement: if a and b are both true
+Python: a and b
 
-Statement: get the emails of all the users
-Python: sql
+Statement: if i is equal to j
+Python: i == j
 
-Statement: if the product of i and j exceeds the number of users
-Python: i * j > len(users)
+Statement: if the product of i and j exceeds the length of l
+Python: i * j > len(l)
+
+Statement: if i is equal to {{something}}
+Python: i == something
+
+Statement: if the person's id is equal to {{id}}
+Python: person.id == id
+
+The next few examples will use the following variables:
+{context_string}
+(where User is a class with fields id: int, email: int, is_admin: bool)
 
 Statement: {text}
 Python:"""
 
-    result = cached_complete(prompt, engine='curie').strip()
-    if result == 'sql':
-        sql = english2sql(english_query=text, schema_text=schema_text)
-        return SQLStatement(
-            type='sql',
-            original=text,
-            sql=sql
-        )
-    else:
-        return PythonStatement(
-            type='python',
-            original=text,
-            code=result
-        )
+    result = cached_complete(prompt, engine='davinci').strip()
+    return PythonConditionalStatement(
+        type='python-conditional',
+        original=text,
+        code=result
+    )
 
 
 def parse_output(text: str) -> OutputStatement:
@@ -371,6 +449,7 @@ def _parse_code_block(lines: List[str], context: Context, schema_text: str, glob
         line_type = determine_code_block_type(lines[local_line_index])
         if line_type == 'if':
             condition = lines[local_line_index][2:].strip()
+            condition_stat = parse_python_conditional_statement(condition, context)
             if local_line_index == len(lines) - 1:
                 raise ValueError('Expected indented code block after "if" statement.')
             case_true_block, context, local_line_index = _parse_code_block(
@@ -385,8 +464,7 @@ def _parse_code_block(lines: List[str], context: Context, schema_text: str, glob
             if local_line_index >= len(lines):
                 stat = IfStatement(
                     type='if',
-                    context=context,
-                    condition=condition,
+                    condition=condition_stat,
                     case_true=case_true_block,
                     case_false=None
                 )
@@ -410,8 +488,7 @@ def _parse_code_block(lines: List[str], context: Context, schema_text: str, glob
                     )
                     stat = IfStatement(
                         type='if',
-                        context=context,
-                        condition=condition,
+                        condition=condition_stat,
                         case_true=case_true_block,
                         case_false=case_false_block
                     )
@@ -423,19 +500,19 @@ def _parse_code_block(lines: List[str], context: Context, schema_text: str, glob
                 else:
                     stat = IfStatement(
                         type='if',
-                        context=context,
-                        condition=condition,
+                        condition=condition_stat,
                         case_true=case_true_block,
                         case_false=None
                     )
                     block.append(stat)
+                    local_line_index -= 1
 
         elif line_type == 'exception':
             exception_stat = parse_exception(lines[local_line_index])
             block.append(exception_stat)
 
         elif line_type == 'assignment':
-            assignment_stat = parse_assignment(lines[local_line_index])
+            assignment_stat = parse_assignment(lines[local_line_index], context=context, schema_text=schema_text)
             block.append(assignment_stat)
 
         elif line_type == 'output':
@@ -443,6 +520,7 @@ def _parse_code_block(lines: List[str], context: Context, schema_text: str, glob
             block.append(output_stat)
 
         elif line_type == 'something-else':
+            print(lines[local_line_index])
             raise ValueError('TODO')
 
         else:
