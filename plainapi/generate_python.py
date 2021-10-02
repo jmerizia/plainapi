@@ -1,11 +1,11 @@
-from typing import TypedDict
+from typing import List, TypedDict
 import os
 from dotenv import load_dotenv
 import openai  # type: ignore
 
-from plainapi.parse_endpoint import Endpoint
+from plainapi.parse_endpoint import Endpoint, FunctionInput
 from plainapi.parse_application import Application
-from plainapi.parse_code import AssignmentStatement, CodeBlock, ExceptionStatement, IfStatement, OutputStatement, PythonStatement, SQLStatement
+from plainapi.types import AssignmentStatement, CodeBlock, ExceptionStatement, FunctionCallStatement, IfStatement, OutputStatement, PythonStatement, RightHandSideStatement, SQLStatement
 
 
 load_dotenv('./.env')
@@ -24,7 +24,10 @@ def url2endpoint_function_name(url: str) -> str:
 def string2variable_name(s: str) -> str:
     clean = ''.join(c if c.isalnum() else ' ' for c in s)
     parts = [s.strip() for s in clean.split(' ') if s.strip() != '']
-    return '_'.join(parts)
+    if len(parts) < 0:
+        return '_'
+    else:
+        return '_'.join(parts)
 
 
 def escape_quotes(s: str) -> str:
@@ -39,37 +42,63 @@ def escape_quotes(s: str) -> str:
     return o
 
 
-def generate_output_statement(block: OutputStatement, indent=0):
+def generate_right_hand_side_statement(block: RightHandSideStatement) -> str:
+    if block['type'] == 'sql':
+        return generate_sql_statement(block)
+    elif block['type'] == 'python':
+        return generate_python_statement(block)
+    elif block['type'] == 'function_call':
+        return generate_function_call(block)
+    else:
+        raise ValueError('Internal Error')
+
+
+def generate_output_statement(block: OutputStatement, indent=0) -> str:
     tab = ' ' * indent
-    value = block['value']
-    return tab + 'return ' + value + '\n'
+    rhs = generate_right_hand_side_statement(block['value'])
+    comment = block['original'].strip()
+    return f'{tab}return {rhs}  # {comment}\n'
 
 
-def generate_sql_statement(block: SQLStatement):
+def generate_sql_statement(block: SQLStatement) -> str:
     sql = block['sql']
-    return f'execute({sql})'
+    block[]
+    columns = [i['name'] for i in block['outputs']]
+    return f'sql(\"{sql.strip()}\", columns={columns}, params=[])'
 
 
-def generate_exception_statement(block: ExceptionStatement, indent=0):
+def generate_exception_statement(block: ExceptionStatement, indent=0) -> str:
     tab = ' ' * indent
     code = block['code'] or 400
     message = block['message'] or 'An error has occurred.'
-    return f'{tab}raise HTTPException(status_code={code}, detail={message})\n'
+    comment = block['original']
+    return f'{tab}raise HTTPException(status_code={code}, detail={message})  # {comment.strip()}\n'
 
 
-def generate_python_statement(block: PythonStatement):
+def generate_python_statement(block: PythonStatement) -> str:
     return block['code']
 
 
-def generate_assigment_statement(block: AssignmentStatement, indent=0):
+def generate_function_call(block: FunctionCallStatement) -> str:
+    return block['function_name'] + '()'
+
+
+def generate_assigment_statement(block: AssignmentStatement, indent=0) -> str:
     tab = ' ' * indent
     variable_name = string2variable_name(block['name'])
     value = block['value']
     if value['type'] == 'python':
+        comment = block['original']
         value_string = generate_python_statement(value)
-    else:
+    elif value['type'] == 'sql':
+        comment = block['original']
         value_string = generate_sql_statement(value)
-    return f'{tab}{variable_name} = {value_string}\n'
+    elif value['type'] == 'function_call':
+        comment = block['original']
+        value_string = generate_function_call(value)
+    else:
+        raise ValueError('Internal Error')
+    return f'{tab}{variable_name} = {value_string}  # {comment.strip()}\n'
 
 
 def generate_if_statement(block: IfStatement, indent=0):
@@ -90,18 +119,23 @@ def generate_code_block(block: CodeBlock, indent=0) -> str:
     for line in block:
         if line['type'] == 'if':
             text += generate_if_statement(line, indent)
-        elif line['type'] == 'function_call':
-            text += tab + 'function_call\n'
         elif line['type'] == 'exception':
             text += generate_exception_statement(line, indent)
         elif line['type'] == 'assignment':
             text += generate_assigment_statement(line, indent)
-        elif line['type'] == 'python':
-            text += tab + '<python>\n'
-        elif line['type'] == 'sql':
-            text += generate_sql_statement(line) + '\n'
         elif line['type'] == 'output':
             text += generate_output_statement(line, indent)
+        elif line['type'] == 'function_call':
+            comment = line['original'].strip()
+            text += tab + generate_function_call(line) + f'  # {comment}\n'
+        elif line['type'] == 'python':
+            comment = line['original'].strip()
+            text += tab + generate_python_statement(line) + f'  # {comment}\n'
+        elif line['type'] == 'sql':
+            comment = line['original'].strip()
+            text += tab + generate_sql_statement(line) + f'  # {comment}\n'
+        else:
+            raise ValueError('Internal Error')
     return text
 
 
@@ -114,15 +148,32 @@ def generate_endpoint(endpoint: Endpoint, schema_text: str, use_cache=True) -> s
 
     """
 
+    def gen_params(params: List[FunctionInput]) -> str:
+        return ', '.join(i['name'] + ': ' + i['type'] for i in params)
+
     func_name = url2endpoint_function_name(endpoint['header']['url'])
     url = endpoint['header']['url'].lower()
     method = endpoint['header']['method'].lower()
-    params = ', '.join(i['name'] + ': ' + (i['type'] if i['name'] != 'current_user' else 'User = Depends(get_current_user)') for i in endpoint['requirements']['inputs'])
+    contains_current_user = 'current_user' in [i['name'] for i in endpoint['requirements']['inputs']]
+    if contains_current_user:
+        p = [i for i in endpoint['requirements']['inputs'] if i['name'] != 'current_user'] \
+            + [FunctionInput(name='current_user', type='User = Depends(get_current_user)')]
+        params = gen_params(p)
+    else:
+        params = gen_params(endpoint['requirements']['inputs'])
     implementation = generate_code_block(endpoint['implementation'], indent=4)
 
+    outputs = endpoint['requirements']['outputs']
+    if len(outputs) == 0:
+        response_model = 'None'
+    elif len(outputs) == 1:
+        response_model = outputs[0]['type']
+    else:
+        response_model = 'Tuple[{}]'.format(', '.join(i['type'] for i in outputs))
+
     code = \
-f'''@app.{method}("{url}", response_model=None)
-async def {func_name}({params}) -> None:
+f'''@app.{method}("{url}", response_model={response_model})
+async def {func_name}({params}):
 {implementation}'''
 
     return code
@@ -134,7 +185,7 @@ def generate_app(application: Application, schema_text: str, db_name: str, host:
     code_for_endpoints = '\n\n'.join(generate_endpoint(endpoint, schema_text) for endpoint in application['endpoints'])
 
     code = \
-f'''from typing import List, Union, Literal, Optional, Dict, Any
+f'''from typing import List, Union, Literal, Optional, Dict, Any, Tuple
 from fastapi import FastAPI, Path, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -142,6 +193,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 import os
 import sqlite3
+
 
 ALGORITHM = "HS256"
 SECRET_KEY = "TODO"
@@ -168,9 +220,15 @@ class User(BaseModel):
     is_admin: bool
 
 
-def sql(query: str, params: Any):
-    # TODO
-    return None
+con = sqlite3.connect('{db_name}')
+
+
+def sql(query: str, columns: List[str], params: Any = []):
+    rows = con.cursor().execute(query, params)
+    dicts = []
+    for row in rows:
+        dicts.append({{ k: v for k, v in zip(columns, row) }})
+    return dicts
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
@@ -190,9 +248,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     if user is None:
         raise credentials_exception
     return user
-
-
-con = sqlite3.connect('{db_name}')
 
 
 {code_for_endpoints}'''

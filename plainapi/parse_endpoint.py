@@ -1,33 +1,9 @@
 from typing import Literal, Tuple, List, TypedDict, Union, Dict, Any, cast
 
 from plainapi.gpt3 import cached_complete
-from plainapi.parse_code import CodeBlock, Context, Variable, parse_code_block
-
-
-class Header(TypedDict):
-    method: Literal['GET', 'POST', 'PATCH', 'DELETE']
-    url: str
-
-
-class FunctionInput(TypedDict):
-    name: str
-    type: str
-
-
-class FunctionOutput(TypedDict):
-    name: str
-    type: str
-
-
-class FunctionTypeDefinition(TypedDict):
-    inputs: list[FunctionInput]
-    outputs: list[FunctionOutput]
-
-
-class Endpoint(TypedDict):
-    header: Header
-    requirements: FunctionTypeDefinition
-    implementation: CodeBlock
+from plainapi.types import CodeBlock, Context, Variable
+from plainapi.parse_code import parse_code_block
+from plainapi.types import Header, FunctionTypeDefinition, FunctionInput, FunctionOutput, Endpoint
 
 
 def parse_header(header_string: str) -> Header:
@@ -62,7 +38,23 @@ method and url:"""
         raise ValueError(f'Invalid method {method}')
 
 
-def parse_requirements(requirements_string: str) -> FunctionTypeDefinition:
+def parse_url_variable_names(url: str) -> List[str]:
+    l = None
+    variables: List[str] = []
+    for idx, c in enumerate(url):
+        if c == '{':
+            if l is not None:
+                raise ValueError(f'Invalid url {url}')
+            l = idx + 1
+        elif c == '}':
+            if l is None:
+                raise ValueError(f'Invalid url {url}')
+            r = idx
+            variables.append(url[l:r])
+    return variables
+
+
+def parse_requirements(requirements_string: str, url_string: str) -> FunctionTypeDefinition:
 
     if '\n' in requirements_string:
         raise ValueError('Expected requirements string to be one line.')
@@ -121,7 +113,7 @@ def parse_endpoint(endpoint_string: str, schema_text: str, global_line_offset: i
     requirements_string = lines[1]
     implementation_lines = lines[2:]
     header = parse_header(header_string)
-    requirements = parse_requirements(requirements_string)
+    requirements = parse_requirements(requirements_string, url_string=header['url'])
     variables = [Variable(name=r['name'], type=r['type']) for r in requirements['inputs']]
     context = Context(variables=variables)
     implementation = parse_code_block(

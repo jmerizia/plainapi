@@ -1,21 +1,9 @@
 from typing import Tuple, List, TypedDict, Union, Dict, Any, cast
 
 from plainapi.gpt3 import cached_complete
-
-
-class Input(TypedDict):
-    name: str
-    type: str
-
-
-class Column(TypedDict):
-    name: str
-    type: str
-
-
-class Table(TypedDict):
-    name: str
-    columns: list[Column]
+from plainapi.generate_sql import english2sql
+from plainapi.types import Context, SQLStatement, Variable
+from plainapi.types import Input, Column, Table
 
 
 def tokenize_sql(text):
@@ -91,7 +79,7 @@ def schema_type2type_hint(schema_type_text: str):
     low = tok.lower()
     if low.startswith('varchar'):
         return 'str'
-    elif low == 'text':
+    elif low in ['text', 'string']:
         return 'str'
     elif low == 'integer':
         return 'int'
@@ -121,7 +109,7 @@ def type_hint2schema_type(type_hint: str):
         raise ValueError(f'Invalid type "{type_hint}"')
 
 
-def parse_outputs(sql: str) -> list[str]:
+def parse_outputs(sql: str, schema_text: str) -> list[str]:
     """
     Given a single SQL statement, return a list of output columns of the SQL statement.
     All output columns are returned in the format "table_name.column_name".
@@ -184,7 +172,7 @@ def parse_schema(schema_text: str) -> list[Table]:
     return tables
 
 
-def parse_inputs(sql: str, schema_text: str) -> list[str]:
+def parse_input_types(sql: str, schema_text: str) -> list[str]:
 
     qms = sql.count('?')
     if qms == 0:
@@ -220,3 +208,19 @@ def get_columns_for_table(schema_text: str, table_name: str) -> Any:
     if len(res) != 1:
         raise ValueError(f'Invalid table name {table_name}')
     return res[0]['columns']
+
+
+def parse_sql_statement(text: str, context: Context, schema_text: str) -> SQLStatement:
+    sql, parameters = english2sql(text, context, schema_text=schema_text)
+    # input_types = parse_input_types(sql, schema_text=schema_text)
+    # if len(parameters) != len(input_types):
+    #     raise ValueError(f'Internal Error: {parameters} != {input_types} for SQL {sql}')
+    inputs = [Variable(type=schema_type2type_hint('text'), name=name) for name in parameters]
+    outputs = [Variable(name=name, type='Any') for name in parse_outputs(sql, schema_text)]
+    return SQLStatement(
+        type='sql',
+        original=text,
+        sql=sql,
+        inputs=inputs,
+        outputs=outputs,
+    )

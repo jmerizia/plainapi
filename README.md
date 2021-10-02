@@ -33,6 +33,8 @@ This will create some initial boilerplate.
     - [x] python expressions
     - [ ] function calls
     - [ ] return statements
+    - [ ] assignment
+    - [ ] in-line SQL
 - [ ] deployment management
     - [ ] adding migrations
     - [ ] start/stop/restart commands
@@ -41,7 +43,10 @@ This will create some initial boilerplate.
     - [ ] GPT-J
 - [ ] efficiency
     - [ ] parallelize endpoint parsing
-- [ ] better error handling
+- [ ] refactoring
+    - [ ] better error handling
+    - [ ] use pydantic instead of TypedDict
+    - [ ] OpenAPI schema generation
 - [ ] init command for quick start
 - [ ] standard library
     - [ ] getting current date/time

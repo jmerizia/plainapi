@@ -1,0 +1,14 @@
+macro sqlite (something: str, )
+    match
+        "sql:" sql_statement
+    instructions
+        "For the given statements, convert them to valid SQLite statements."
+    examples
+        "get all of the users"
+
+
+GET at /users
+function get_all_users
+    match "get_all_users"
+    instructions
+

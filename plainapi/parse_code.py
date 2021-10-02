@@ -1,3 +1,4 @@
+from plainapi.parse_sql import parse_sql_statement
 from typing import Literal, Optional, Tuple, List, TypedDict, Union, Dict, Any, cast
 import itertools
 import json
@@ -5,85 +6,31 @@ import json
 from plainapi.gpt3 import cached_complete
 from plainapi.generate_sql import english2sql
 from plainapi.utils import get_db_schema_text
+from plainapi.types import Context, Variable, Function, CodeBlock
+from plainapi.types import IfStatement, FunctionCallStatement, RightHandSideStatement, ExceptionStatement, AssignmentStatement, OutputStatement
+from plainapi.types import PythonStatement, PythonConditionalStatement
 
 
-class Variable(TypedDict):
-    name: str
-    type: str
-
-class Function(TypedDict):
-    name: str
-    inputs: List[Variable]
-    outputs: List[Variable]
-
-class Context(TypedDict):
-    variables: List[Variable]
-
-class Interval(TypedDict):
-    left: int
-    right: int
-
-class FunctionCallStatement(TypedDict):
-    type: Literal['function_call']
-    function_name: str
-    inputs: List[Variable]
-    outputs: List[Variable]
-
-class ExceptionStatement(TypedDict):
-    type: Literal['exception']
-    code: Optional[int]
-    message: Optional[str]
-
-class PythonConditionalStatement(TypedDict):
-    type: Literal['python-conditional']
-    original: str
-    code: str
-
-class PythonStatement(TypedDict):
-    type: Literal['python']
-    original: str
-    code: str
-    return_type: str
-
-class IfStatement(TypedDict):
-    type: Literal['if']
-    condition: PythonConditionalStatement
-    case_true: 'CodeBlock'
-    case_false: Optional['CodeBlock']
-
-class SQLStatement(TypedDict):
-    type: Literal['sql']
-    original: str
-    sql: str
-
-class AssignmentStatement(TypedDict):
-    type: Literal['assignment']
-    name: str
-    value: Union[PythonStatement, SQLStatement]
-
-class OutputStatement(TypedDict):
-    type: Literal['output']
-    value: str
-
-Statement = Union[
-    IfStatement,
-    FunctionCallStatement,
-    ExceptionStatement,
-    AssignmentStatement,
-    PythonStatement,
-    PythonConditionalStatement,
-    SQLStatement,
-    OutputStatement,
-]
-
-CodeBlock = List[Statement]
+def add_variable_to_context(context: Context, variable: Variable) -> Context:
+    new_variables = context['variables'].copy()
+    new_variables.append(variable)
+    return Context(variables=new_variables)
 
 
-def determine_code_block_type(first_line: str) -> Literal['if', 'exception', 'assignment', 'output', 'something-else']:
+def determine_code_block_type(first_line: str) -> Literal['if', 'function', 'sql', 'python', 'exception', 'assignment', 'output', 'something-else']:
     first_line = first_line.strip()
 
     if first_line.startswith('if'):
         return 'if'
+
+    if first_line.startswith('func'):
+        return 'function'
+
+    if first_line.startswith('sql'):
+        return 'sql'
+
+    if first_line.startswith('py'):
+        return 'python'
 
     prompt = \
 f"""For each of the following statements, determine what kind of statement it would be if written in code. All statements must be one of the following:
@@ -179,6 +126,16 @@ function name:"""
         raise ValueError('Internal Error: function name is not among the given names')
 
 
+def parse_function_statement(text: str, context: Context) -> FunctionCallStatement:
+    return FunctionCallStatement(
+        type='function_call',
+        function_name='TODO',
+        inputs=[],
+        outputs=[],
+        original=text,
+    )
+
+
 def determine_else_or_elif(text: str) -> Tuple[Literal['else', 'elif', 'n/a'], Optional[str]]:
 
     prompt = \
@@ -262,8 +219,21 @@ Parsed:"""
     return ExceptionStatement(
         type='exception',
         code=code,
-        message=message_parts[1].strip()
+        message=message_parts[1].strip(),
+        original=text
     )
+
+
+def parse_right_hand_side(text: str, context: Context, schema_text: str) -> RightHandSideStatement:
+    rhs_type = determine_python_function_or_sql_statement(text.strip())
+    if rhs_type == 'sql':
+        return parse_sql_statement(text, context, schema_text)
+    elif rhs_type == 'python':
+        return parse_python_statement(text, context)
+    elif rhs_type == 'function':
+        return parse_function_statement(text, context)
+    else:
+        raise ValueError('Internal Error')
 
 
 def parse_assignment(text: str, context: Context, schema_text: str) -> AssignmentStatement:
@@ -290,28 +260,23 @@ Parsed:"""
     parsed = json.loads(result)
     name = parsed['name']
     value = parsed['value']
-    value_type = determine_python_or_sql_statement(text)
-    if value_type == 'sql':
-        value_stat = SQLStatement(
-            type='sql',
-            original=value,
-            sql=english2sql(text, schema_text=schema_text)
-        )
-    elif value_type == 'python':
-        value_stat = parse_python_statement(text, context)
-    else:
-        raise ValueError('Internal Error')
     return AssignmentStatement(
         type='assignment',
         name=name,
-        value=value_stat
+        value=parse_right_hand_side(value, context, schema_text=schema_text),
+        original=text.strip()
     )
 
 
-def determine_python_or_sql_statement(text: str) -> Literal['python', 'sql']:
+def determine_python_function_or_sql_statement(text: str) -> Literal['python', 'function', 'sql']:
     if text.strip().startswith('sql'):
-        return 'sql'
-    return 'python'
+        t = 'sql'
+    elif text.strip().startswith('func'):
+        t = 'function'
+    else:
+        t = 'python'
+    print(text, " --> ", t)
+    return t
 
 
 def parse_python_statement(text: str, context: Context) -> PythonStatement:
@@ -322,6 +287,8 @@ def parse_python_statement(text: str, context: Context) -> PythonStatement:
 
     prompt = \
 f"""Convert each of the following statements to a one line Python statement.
+At any time, you may use the following functions:
+remove_property(d: dict, name: str)
 
 The first few examples will use the following variables:
 a: bool
@@ -340,8 +307,17 @@ Python: list(sort(people))
 Statement: find the person where id is {{id}}
 Python: [p for p in people if p.id == id]
 
+Statement: people
+Python: people
+
 Statement: the person with the largest id if there are people, otherwise none
 Python: max(people, key=lambda p: p.id) if len(people) > 0 else None
+
+Statement: remove the id from the person
+Python: remove_property(person, "id")
+
+Statement: an object with id {{id}} and email {{email}}
+Python: {{"id": id, "email": email}}
 
 The next few examples will use the following variables:
 {context_string}
@@ -411,7 +387,7 @@ Python:"""
     )
 
 
-def parse_output(text: str) -> OutputStatement:
+def parse_output_statement(text: str, context: Context, schema_text: str) -> OutputStatement:
 
     prompt = \
 f"""For the following statements, parse out what should be returned.
@@ -422,13 +398,18 @@ Output: the oldest user
 Statement: return {{user}}
 Output: {{user}}
 
+Statement: report sql: the oldest user
+Output: sql: the oldest user
+
 Statement: {text.strip()}
 Output:"""
 
     result = cached_complete(prompt, engine='curie')
+    print("OUTPUT:", text, "-->", result)
     stat = OutputStatement(
         type='output',
-        value=result.strip()
+        value=parse_right_hand_side(result, context, schema_text),
+        original=text.strip()
     )
     return stat
 
@@ -513,15 +494,17 @@ def _parse_code_block(lines: List[str], context: Context, schema_text: str, glob
 
         elif line_type == 'assignment':
             assignment_stat = parse_assignment(lines[local_line_index], context=context, schema_text=schema_text)
+            context = add_variable_to_context(context, variable=Variable(name=assignment_stat['name'], type='Any'))
             block.append(assignment_stat)
 
         elif line_type == 'output':
-            output_stat = parse_output(lines[local_line_index])
+            output_stat = parse_output_statement(lines[local_line_index], context, schema_text)
             block.append(output_stat)
 
-        elif line_type == 'something-else':
-            print(lines[local_line_index])
-            raise ValueError('TODO')
+        elif line_type in ['sql', 'python', 'function', 'something-else']:
+            # treat something-else as Python
+            rhs = parse_right_hand_side(lines[local_line_index], context, schema_text)
+            block.append(rhs)
 
         else:
             raise ValueError(f'Invalid statement on line {global_line_offset + local_line_index}')
